@@ -1,0 +1,2 @@
+java -classpath ".;C:\work\games\lib\jackson-annotations-2.4.2.jar;C:\work\games\lib\jackson-core-2.4.2.jar;C:\work\games\lib\jackson-databind-2.4.2.jar;C:\work\games\lib\log4j-1.2.17.jar;C:\work\games\lib\netty-all-4.0.23.Final.jar;C:\work\games\lib\netty-socketio-1.7.2.jar;C:\work\games\lib\slf4j-api-1.7.7.jar;C:\work\games\lib\slf4j-log4j12-1.7.7.jar" ru.ifmo.ctddev.games.GameServer
+rem

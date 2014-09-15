@@ -1,0 +1,2 @@
+javac -classpath ".;C:\work\games\lib\netty-all-4.0.23.Final.jar;C:\work\games\lib\netty-socketio-1.7.2.jar" ru/ifmo/ctddev/games/messages/*.java ru/ifmo/ctddev/games/state/*.java ru/ifmo/ctddev/games/GameServer.java
+rem
