@@ -3,40 +3,44 @@ package ru.ifmo.ctddev.games.state;
 import java.util.Random;
 
 
-/**
+/**8
  * Created by Aksenov239 on 30.08.2014.
  */
 public class MapState {
     public enum Field {
-        GRASS, DESERT, MOUNTAIN;
+        GRASS, DESERT, MOUNTAIN, SHOP
     }
 
+    private int N = 30;
+    private int M = 30;
     private Field[][] map;
-    private static int defaultX = 5;
-    private static int defaultY = 5;
-    public static int[] dx = {1, 0, -1, 0};
-    public static int[] dy = {0, 1, 0, -1};
+    private int defaultX = N / 2;
+    private int defaultY = M / 2;
 
     private Random rnd = new Random(239);
 
     public MapState() {
-        map = new Field[11][11];
+        map = new Field[N][M];
 
         for (int i = 0; i < map.length; i++) {
             for (int j = 0; j < map[i].length; j++) {
                 map[i][j] = rnd.nextBoolean() ? Field.GRASS : Field.DESERT;
             }
         }
-
-        defaultX = 5;
-        defaultY = 5;
+        int x = rnd.nextInt(N);
+        int y = rnd.nextInt(M);
+        while (x == defaultX && y == defaultY) {
+            x = rnd.nextInt(N);
+            y = rnd.nextInt(M);
+        }
+        map[x][y] = Field.SHOP;
     }
 
-    public static int getDefaultX() {
+    public int getDefaultX() {
         return defaultX;
     }
 
-    public static int getDefaultY() {
+    public int getDefaultY() {
         return defaultY;
     }
 
@@ -44,30 +48,37 @@ public class MapState {
         return 0 <= x && x < map.length && 0 <= y && y < map[0].length ? map[x][y] : Field.MOUNTAIN;
     }
 
-    public boolean canMove(PlayerState state, int direction) {
-        int x = state.getX() + dx[direction];
-        int y = state.getY() + dy[direction];
-
-        return getValue(x, y) != Field.MOUNTAIN;
+    public boolean canMove(int x, int y, int dx, int dy) {
+        return getValue(x + dx, y + dy) != Field.MOUNTAIN;
     }
 
-    public int[][] getVision(PlayerState state, int vision) {
+    public int[][] getVision(PlayerState state) {
+        int x = state.getX(), y = state.getY();
+        int vision = state.getVision();
         int[][] part = new int[2 * vision + 1][2 * vision + 1];
-        for (int i = state.getX() - vision; i <= state.getX() + vision; i++) {
-            for (int j = state.getY() - vision; j <= state.getY() + vision; j++) {
-                part[i - (state.getX() - vision)][j - (state.getY() - vision)] = getValue(i, j).ordinal();
+        for (int i = x - vision; i <= x + vision; i++) {
+            for (int j = y - vision; j <= y + vision; j++) {
+                part[i - (x - vision)][j - (y - vision)] = getValue(i, j).ordinal();
             }
         }
         return part;
     }
 
-    public int[] getNextLayer(PlayerState state, int vision, int direction) {
+    public int[] getNextLayer(PlayerState state, int dx, int dy) {
+        int vision = state.getVision();
         int[] layer = new int[2 * vision + 1];
-
-        int fixed = (direction % 2 == 0 ? state.getX() : state.getY()) + (direction < 2 ? 1 : -1) * (vision + 1);
+        int fixed = (dy != 0 ? state.getX() : state.getY()) + (dx + dy) * (vision + 1);
         for (int i = 0; i < layer.length; i++) {
-            layer[i] = (direction % 2 == 0 ? getValue(fixed, i - vision + state.getY()) : getValue(i - vision + state.getX(), fixed)).ordinal();
+            layer[i] = (dy != 0 ? getValue(fixed, i - vision + state.getY()) : getValue(i - vision + state.getX(), fixed)).ordinal();
         }
         return layer;
+    }
+
+    public int[][] getField() {
+        int[][] retField = new int[N][M];
+        for (int i = 0; i < N; ++i)
+            for (int j = 0; j < M; ++j)
+                retField[i][j] = map[i][j].ordinal();
+        return retField;
     }
 }

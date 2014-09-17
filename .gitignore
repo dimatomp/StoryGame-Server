@@ -1,2 +1,3 @@
-open world/out
-open world/.idea
+/out
+/.idea
+*.iml
