@@ -19,12 +19,11 @@ public class PlayerState {
     private int energy;
     private int money;
     private int lastActionTime;
-    private Map<Long, UserVote> votes;
 
 /*   public PlayerState() {
         x = MapState.getDefaultX();
         y = MapState.getDefaultY();
-        votes = new HashMap<Long, UserVote>();
+        activePolls = new HashMap<Long, UserVote>();
         money = 0;
     }*/
 
@@ -65,10 +64,6 @@ public class PlayerState {
 
     public void addMoney(int add) {
         money += add;
-    }
-
-    public Map<Long, UserVote> getVotes() {
-        return votes;
     }
 
     public int getLastActionTime() {

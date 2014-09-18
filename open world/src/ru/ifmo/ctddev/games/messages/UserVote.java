@@ -4,27 +4,39 @@ package ru.ifmo.ctddev.games.messages;
  * Created by dimatomp on 14.09.14.
  */
 public class UserVote {
-    private int option;
-    private int money;
+    private int idPoll;
+    private String optionName;
+    private int amount;
 
-    public UserVote(int option, int money) {
-        this.option = option;
-        this.money = money;
+    public UserVote() {}
+
+    public UserVote(int idPoll, String optionName, int amount) {
+        this.idPoll = idPoll;
+        this.optionName = optionName;
+        this.amount = amount;
     }
 
-    public int getOption() {
-        return option;
+    public int getIdPoll() {
+        return idPoll;
     }
 
-    public void setOption(int option) {
-        this.option = option;
+    public String getOptionName() {
+        return optionName;
     }
 
-    public int getMoney() {
-        return money;
+    public int getAmount() {
+        return amount;
     }
 
-    public void setMoney(int money) {
-        this.money = money;
+    public void setIdPoll(int idPoll) {
+        this.idPoll = idPoll;
+    }
+
+    public void setOptionName(String optionName) {
+        this.optionName = optionName;
+    }
+
+    public void setAmount(int amount) {
+        this.amount = amount;
     }
 }

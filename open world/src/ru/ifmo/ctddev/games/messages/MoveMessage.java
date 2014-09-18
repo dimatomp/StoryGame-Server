@@ -11,7 +11,6 @@ public class MoveMessage {
     }
 
     public MoveMessage(int dx, int dy) {
-        super();
         this.dx = dx;
         this.dy = dy;
     }
@@ -21,5 +20,13 @@ public class MoveMessage {
     }
     public int getDy() {
         return dy;
+    }
+
+    public void setDx(int dx) {
+        this.dx = dx;
+    }
+
+    public void setDy(int dy) {
+        this.dy = dy;
     }
 }

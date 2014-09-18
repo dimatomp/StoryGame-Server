@@ -7,6 +7,8 @@ public class StartMessage {
     private boolean success;
     private int field[][];
 
+    public StartMessage() {}
+
     public StartMessage(boolean success) {
         this.success = success;
         field = null;
@@ -23,5 +25,13 @@ public class StartMessage {
 
     public void setSuccess(boolean success) {
         this.success = success;
+    }
+
+    public int[][] getField() {
+        return field;
+    }
+
+    public void setField(int[][] f) {
+        field = f;
     }
 }

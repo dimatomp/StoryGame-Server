@@ -1,12 +1,19 @@
 package ru.ifmo.ctddev.games.state;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 /**
  * Created by Aksenov239 on 30.08.2014.
  */
 public class Poll {
-    private long id;
+    private int id;
     private String question;
-    private String[] options;
+    private String[] optionsName;
+
+    @JsonIgnore
+    private int[] optionsId;
+
     private int[] minimalAmount;
     private int priority = 0;
     private Integer result;
@@ -16,22 +23,24 @@ public class Poll {
     public Poll() {
     }
 
-    public Poll(long id, String question, String[] options, int[] minimalAmount) {
+    public Poll(int id, String question, int[] optionsId, String[] optionsName, int[] minimalAmounts, int[] investedMoney) {
         this.id = id;
         this.question = question;
-        this.options = options;
-        this.minimalAmount = minimalAmount;
+        this.optionsId = optionsId;
+        this.optionsName = optionsName;
+        this.minimalAmount = minimalAmounts;
+        this.investedMoney = investedMoney;
     }
 
     public void vote(int option, int amount) {
         investedMoney[option] += amount;
     }
 
-    public long getId() {
+    public int getId() {
         return id;
     }
 
-    public void setId(long id) {
+    public void setId(int id) {
         this.id = id;
     }
 
@@ -43,20 +52,51 @@ public class Poll {
         this.question = question;
     }
 
-    public String[] getOptions() {
-        return options;
+    public String[] getOptionsName() {
+        return optionsName;
     }
 
-    public void setOptions(String[] options) {
-        this.options = options;
+    public void setOptionsName(String[] optionsName) {
+        this.optionsName = optionsName;
     }
 
-    public int[] getMinimalAmount() {
+    public String getOptionName(int id) {
+        for (int i = 0; i < optionsId.length; ++i)
+            if (optionsId[i] == id)
+                return optionsName[i];
+        return null;
+    }
+
+    public int[] getMinimalAmounts() {
         return minimalAmount;
+    }
+
+    public int getMinimalAmountById(int id) {
+        return minimalAmount[id];
+    }
+
+    public int getMinimalAmountByName(String name) {
+        for (int i = 0; i < optionsName[i].length(); ++i)
+            if (optionsName[i].equals(name))
+                return minimalAmount[i];
+        return -1;
+    }
+
+    public int getOptionId(String name) {
+        for (int i = 0; i < optionsName[i].length(); ++i)
+            if (optionsName[i].equals(name))
+                return i;
+        return -1;
     }
 
     public void setMinimalAmount(int[] minimalAmount) {
         this.minimalAmount = minimalAmount;
+    }
+
+    public void addInvestedMoney(String optionName, int x) {
+        for (int i = 0; i < optionsName.length; ++i)
+            if (optionsName[i].equals(optionName))
+                investedMoney[i] += x;
     }
 
     public int getPriority() {
@@ -81,5 +121,42 @@ public class Poll {
 
     public void setDate(String date) {
         this.date = date;
+    }
+
+    public boolean containsOption(int id) {
+        for (int i = 0; i < optionsId.length; ++i)
+            if (optionsId[i] == id)
+                return true;
+        return false;
+    }
+
+    public boolean containsOption(String name) {
+        for (int i = 0; i < optionsId.length; ++i)
+            if (optionsName[i].equals(name))
+                return true;
+        return false;
+    }
+
+
+    @JsonProperty("optionsId")
+    public int[] getOptionsId() {
+        return optionsId;
+    }
+
+    @JsonIgnore
+    public void setOptionsId(int[] optionsId) {
+        this.optionsId = optionsId;
+    }
+
+    public void setInvestedMoney(int[] investedMoney) {
+        this.investedMoney = investedMoney;
+    }
+
+    public int[] getMinimalAmount() {
+        return minimalAmount;
+    }
+
+    public int[] getInvestedMoney() {
+        return investedMoney;
     }
 }

@@ -10,6 +10,7 @@ import ru.ifmo.ctddev.games.messages.*;
 import ru.ifmo.ctddev.games.messages.JoinMessage;
 import ru.ifmo.ctddev.games.state.MapState;
 import ru.ifmo.ctddev.games.state.PlayerState;
+import ru.ifmo.ctddev.games.state.Poll;
 import ru.ifmo.ctddev.games.state.VotesState;
 
 import java.io.IOException;
@@ -17,9 +18,6 @@ import java.util.*;
 import java.sql.*;
 
 public class GameServer {
-
-    //final static Map<UUID, String> socketToUsername = new HashMap<UUID, String>();
-    //final static Map<String, PlayerState> usernameToState = new HashMap<String, PlayerState>();
     final static Map <UUID, PlayerState> onlineUsers = new HashMap<UUID, PlayerState>();
     final static int SECONDS_PER_DAY = 24 * 3600;
     static SocketIOServer server;
@@ -34,6 +32,17 @@ public class GameServer {
     static PreparedStatement preStatementDB;
     static ResultSet resultSetDB;
 
+    class CommandReader implements Runnable {
+        @Override
+        public void run() {
+            Scanner in = new Scanner(System.in);
+            while (true) {
+                String cmd = in.nextLine();
+                //
+            }
+        }
+    }
+
     private static void initialization() {
         map = new MapState();
         votesState = new VotesState();
@@ -45,16 +54,19 @@ public class GameServer {
             System.out.close();
         } catch (IOException e) {
             System.err.println("Failed to daemonize myself.");
+            System.exit(0);
         }
 
         ///Database initializate
-        if (args.length != 3) {
-            System.err.println("You don't input information about database!");
+        if (args.length != 5) {
+            System.err.println("You don't input information!");
             System.exit(0);
         }
-        NAME_OF_DB = args[0];
-        USER = args[1];
-        PASSWORD = args[2];
+        String ip = args[0];
+        int port = Integer.parseInt(args[1]);
+        NAME_OF_DB = args[2];
+        USER = args[3];
+        PASSWORD = args[4];
 
         try {
             Class.forName("com.mysql.jdbc.Driver").newInstance();
@@ -65,7 +77,6 @@ public class GameServer {
 
         System.err.println("Connecting to database...");
         try {
-            //connectionToDB = DriverManager.getConnection("jdbc:mysql://localhost/" + NAME_OF_DB, USER, PASSWORD);
             connectionToDB = DriverManager.getConnection("jdbc:mysql://localhost/" + NAME_OF_DB, USER, PASSWORD);
             System.err.println("Successful connection to database!");
         } catch (Exception ex) {
@@ -73,14 +84,17 @@ public class GameServer {
             ex.printStackTrace();
             System.exit(0);
         }
-
+        System.err.println("Load active polls...");
+        VotesState.setDatabase(connectionToDB);
+        VotesState.loadActivePolls();
+        System.err.println("Successful load active polls!");
 
         initialization();
         Configuration config = new Configuration();
-        config.setHostname("192.168.117.133");
-        config.setPort(9092);
+        config.setHostname(ip);
+        config.setPort(port);
 
-         server = new SocketIOServer(config);
+        server = new SocketIOServer(config);
 
         System.err.println("The server has started!");
 
@@ -168,50 +182,40 @@ public class GameServer {
             }
         });
 
-        /*server.addEventListener("vote_information", VotesInformationRequestMessage.class, new DataListener<VotesInformationRequestMessage>() {
+        /*
+            * -> vote_information
+            * <- vote_information, {polls: {id: long, question: string, options: string[], minimalAmount: int[], priority: int, date: string, investedMoney: int[]}[], userVotes: {id -> {optionId: string, amount: int}}}
+        */
+        server.addEventListener("vote_information", VotesInformationRequestMessage.class, new DataListener<VotesInformationRequestMessage>() {
             @Override
-            public void onData(SocketIOClient socketIOClient, VotesInformationRequestMessage votesInformationRequestMessage, AckRequest ackRequest) throws Exception {
-                String username = socketToUsername.get(socketIOClient.getSessionId());
-                PlayerState state = usernameToState.get(username);
-
-                Map<Long, UserVote> player_votes = state.getVotes();
-                Set<Long> toRemove = new HashSet<Long>();
-                for (Long id : player_votes.keySet()) {
-                    if (!votesState.active(id))
-                        toRemove.add(id);
-                }
-
-                for (Long id : toRemove)
-                    player_votes.remove(id);
-
-                socketIOClient.sendEvent("vote_information", new VotesInformationResponseMessage(VotesState.getVotes(), player_votes));
+            public void onData(SocketIOClient socketIOClient, VotesInformationRequestMessage data, AckRequest ackRequest) throws Exception {
+                voteInformation(socketIOClient, data, ackRequest);
             }
         });
 
+        /*
+            * -> vote, {pollId: int, optionName: string, amount: int}
+            * <- vote_response, {success: boolean}
+        */
         server.addEventListener("vote", VoteMessage.class, new DataListener<VoteMessage>() {
             @Override
-            public void onData(SocketIOClient socketIOClient, VoteMessage voteMessage, AckRequest ackRequest) throws Exception {
-                String username = socketToUsername.get(socketIOClient.getSessionId());
-                PlayerState state = usernameToState.get(username);
-
-                int optNumber = 0;
-                boolean result = VotesState.vote(state, voteMessage.getId(), voteMessage.getOption(), voteMessage.getAmount());
-                socketIOClient.sendEvent("vote_result", new VoteResultMessage(result));
+            public void onData(SocketIOClient socketIOClient, VoteMessage data, AckRequest ackRequest) throws Exception {
+                vote(socketIOClient, data, ackRequest);
             }
-        });*/
+        });
 
         server.start();
-
-        Thread.sleep(20000);
-        System.out.println("Sending test poll.");
-        votesState.addPoll("How about now?", new int[]{0, 0}, "Yes", "No");
-        server.getBroadcastOperations().sendEvent("new_vote");
+        Thread.sleep(30000);
+        newVote("This pull works?", new String[] {"Yes", "No"}, new int[] {10, 12});
+        System.err.println("New vote was sent!");
+        /*System.out.println("Sending test poll.");
+        votesState.addActivePoll("How about now?", new int[]{0, 0}, "Yes", "No");
+        server.getBroadcastOperations().sendEvent("new_vote");*/
 
         Thread.sleep(Integer.MAX_VALUE);
 
         server.stop();
     }
-
 
     //API methods
     private static void joinRequest(SocketIOClient client, JoinMessage data, AckRequest ackRequest) {
@@ -221,11 +225,11 @@ public class GameServer {
         PlayerState newOnlineUser = null;
 
         try {
-            preStatementDB = connectionToDB.prepareStatement("SELECT * FROM Users WHERE userId = '1';");
+            preStatementDB = connectionToDB.prepareStatement("SELECT * FROM Users WHERE userId = ?;");
             preStatementDB.setString(1, name);
             resultSetDB = preStatementDB.executeQuery();
             if (resultSetDB.getFetchSize() == 0) {//new user
-                preStatementDB = connectionToDB.prepareStatement("INSERT INTO Users (userName, energy, money, x, y, lastAction) " +
+                preStatementDB = connectionToDB.prepareStatement("INSERT INTO Users (userName, energy, money, x, y, lastActionTime) " +
                                                                  "VALUES (?, ?, ?, ?, ?, ?);");
                 int currentTime = (int)(System.currentTimeMillis() / 1000);
                 preStatementDB.setString(1, name);
@@ -237,8 +241,8 @@ public class GameServer {
                 preStatementDB.executeUpdate();
 
                 preStatementDB = connectionToDB.prepareStatement("SELECT LAST_INSERT_ID();");
-                resultSetDB.next();
                 resultSetDB = preStatementDB.executeQuery();
+                resultSetDB.next();
                 newOnlineUser = new PlayerState(resultSetDB.getInt(1), name,
                         PlayerState.MAX_ENERGY, PlayerState.DEFAULT_MONEY, map.getDefaultX(), map.getDefaultY(), currentTime);
                 onlineUsers.put(sessionId, newOnlineUser);
@@ -265,9 +269,11 @@ public class GameServer {
                 }
                 onlineUsers.put(sessionId, newOnlineUser);
             }
+            preStatementDB.close();
         } catch (Exception e) {
             client.sendEvent("start", new StartMessage(false));
             e.printStackTrace();
+            System.exit(0);
         }
         client.sendEvent("start", new StartMessage(true, map.getVision(newOnlineUser)));
 
@@ -285,7 +291,7 @@ public class GameServer {
         PlayerState state = onlineUsers.get(client.getSessionId());
         MoveResponseMessage moveResponseMessage;
         if (map.canMove(state.getX(), state.getY(), dx, dy)) {
-            moveResponseMessage = new MoveResponseMessage(true, map.getNextLayer(state, dx, dy));
+            moveResponseMessage = new MoveResponseMessage(true, map.getNextLayer(state, dx, dy), dx, dy);
             client.sendEvent("move_response", moveResponseMessage);
 
             Iterator <SocketIOClient> itBySockets = server.getAllClients().iterator();
@@ -313,5 +319,22 @@ public class GameServer {
 
     private static void dig(SocketIOClient client, DigMessage data, AckRequest ackRequest) {
 
+    }
+
+    //Vote
+    private static void voteInformation(SocketIOClient client, VotesInformationRequestMessage data, AckRequest ackRequest) {
+        PlayerState state = onlineUsers.get(client.getSessionId());
+        client.sendEvent("vote_information", new VotesInformationResponseMessage(VotesState.getActivePolls(), VotesState.getUserVotes(state)));
+    }
+
+    private static void vote(SocketIOClient client, VoteMessage data, AckRequest ackRequest) {
+        PlayerState state = onlineUsers.get(client.getSessionId());
+        boolean result = VotesState.vote(state, data.getId(), data.getOption(), data.getAmount());
+        client.sendEvent("vote_response", new VoteResponseMessage(result));
+    }
+
+    private static void newVote(String question, String[] optionsName, int[] minimalAmount) {
+        Poll poll = VotesState.addActivePoll(question, optionsName, minimalAmount);
+        server.getBroadcastOperations().sendEvent("new_vote", new NewVoteBroadcastMessage(poll));
     }
 }
