@@ -16,7 +16,6 @@ public class VotesState {
     // TODO: There obviously should be synchronization
 
     static Connection connectionToDB;
-    static PreparedStatement preStatementDB;
     public static void setDatabase(Connection db) {
         connectionToDB = db;
     }
@@ -24,7 +23,7 @@ public class VotesState {
     public static void loadActivePolls() {
         activePolls = new HashMap<Integer, Poll>();
         try {
-            preStatementDB = connectionToDB.prepareStatement("SELECT * FROM Polls WHERE active = ?;");
+            PreparedStatement preStatementDB = connectionToDB.prepareStatement("SELECT * FROM Polls WHERE active = ?;");
             preStatementDB.setBoolean(1, true);
             ResultSet resultSetDB = preStatementDB.executeQuery();
             while (resultSetDB.next()) {
@@ -62,6 +61,7 @@ public class VotesState {
     public static Poll addActivePoll(String question, String[] optionsName, int minimalAmount[]) {
         try {
             ResultSet resultSetDB;
+            PreparedStatement preStatementDB;
             preStatementDB = connectionToDB.prepareStatement("INSERT INTO Polls (question, active) VALUES (?, ?);");
             preStatementDB.setString(1, question);
             preStatementDB.setBoolean(2, true);
@@ -89,6 +89,7 @@ public class VotesState {
             }
             Poll ret = new Poll(pollId, question, optionsId, optionsName, minimalAmount, investedMoney);
             activePolls.put(pollId, ret);
+            preStatementDB.close();
             return ret;
         } catch (SQLException e) {
             System.err.println("addActivePoll exception!");
@@ -100,6 +101,7 @@ public class VotesState {
 
     public static void closePoll(int idDel) {
         try {
+            PreparedStatement preStatementDB;
             preStatementDB = connectionToDB.prepareStatement("UPDATE Polls SET active = ? WHERE pollId = ?;");
             preStatementDB.setBoolean(1, false);
             preStatementDB.setInt(2, idDel);
@@ -115,6 +117,7 @@ public class VotesState {
     public static Map <Integer, UserVote> getUserVotes(Player state) {
         try {
             Map <Integer, UserVote> ret = new HashMap<Integer, UserVote>();
+            PreparedStatement preStatementDB;
             preStatementDB = connectionToDB.prepareStatement("SELECT * FROM UserVotes WHERE userId = ?;");
             preStatementDB.setInt(1, state.getUserId());
             ResultSet resultSetDB = preStatementDB.executeQuery();
@@ -157,6 +160,7 @@ public class VotesState {
 
         poll.vote(optionId, amount);
         try {
+            PreparedStatement preStatementDB;
             preStatementDB = connectionToDB.prepareStatement("UPDATE Options SET investedMoney = investedMoney + ? WHERE optionId = ?;");
             preStatementDB.setInt(1, amount);
             preStatementDB.setInt(2, optionId);

@@ -25,9 +25,7 @@ public class GameServer {
     static String USER;
     static String PASSWORD;
     static Connection connectionToDB;
-    static PreparedStatement preStatementDB;
-    static ResultSet resultSetDB;
-
+    //static timerConnection;
     class CommandReader implements Runnable {
         @Override
         public void run() {
@@ -265,6 +263,9 @@ public class GameServer {
         Player newOnlineUser = null;
 
         try {
+            PreparedStatement preStatementDB;
+            ResultSet resultSetDB;
+
             preStatementDB = connectionToDB.prepareStatement("SELECT * FROM Users WHERE userName = ?;");
             preStatementDB.setString(1, name);
             resultSetDB = preStatementDB.executeQuery();
