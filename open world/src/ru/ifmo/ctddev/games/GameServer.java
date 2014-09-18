@@ -23,7 +23,6 @@ public class GameServer {
     static SocketIOServer server;
 
     static MapState map;
-    static VotesState votesState;
 
     static String NAME_OF_DB;
     static String USER;
@@ -45,7 +44,6 @@ public class GameServer {
 
     private static void initialization() {
         map = new MapState();
-        votesState = new VotesState();
     }
 
     public static void main(String[] args) throws InterruptedException {

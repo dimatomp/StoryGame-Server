@@ -5,13 +5,15 @@ import ru.ifmo.ctddev.games.messages.UserVote;
 import java.sql.Connection;
 import java.util.ArrayList;
 import java.sql.*;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * Created by Aksenov239 on 30.08.2014.
  */
 
 public class VotesState {
-    static ArrayList <Poll> activePolls;
+    private static Map<Integer, Poll> activePolls;
     //private static int id = 1;//TODO SHIT, must take from database
     // TODO: There obviously should be synchronization
 
@@ -22,6 +24,7 @@ public class VotesState {
     }
 
     public static void loadActivePolls() {
+        activePolls = new HashMap<Integer, Poll>();
         try {
             preStatementDB = connectionToDB.prepareStatement("SELECT * FROM Polls WHERE active = ?;");
             preStatementDB.setBoolean(1, true);
@@ -37,13 +40,13 @@ public class VotesState {
                 String[] optionsName = new String[size];
                 int[] minimalAmount = new int[size];
                 int[] investedMoney = new int[size];
-                for (int i = 0; allOptions.next(); ++i) {
+                for (int i = 0; i < size; ++i) {
                     optionsId[i] = allOptions.getInt("optionId");
                     optionsName[i] = allOptions.getString("optionName");
                     minimalAmount[i] = allOptions.getInt("minimalAmount");
                     investedMoney[i] = allOptions.getInt("investedMoney");
                 }
-                activePolls.add(new Poll(pollId, question, optionsId, optionsName, minimalAmount, investedMoney));
+                activePolls.put(pollId, new Poll(pollId, question, optionsId, optionsName, minimalAmount, investedMoney));
             }
             resultSetDB.close();
         } catch (SQLException e) {
@@ -54,7 +57,7 @@ public class VotesState {
     }
 
     public VotesState() {
-        activePolls = new ArrayList<Poll>();
+
     }
 
     public static Poll addActivePoll(String question, String[] optionsName, int minimalAmount[]) {
@@ -86,7 +89,7 @@ public class VotesState {
                 investedMoney[i] = 0;
             }
             Poll ret = new Poll(pollId, question, optionsId, optionsName, minimalAmount, investedMoney);
-            activePolls.add(ret);
+            activePolls.put(pollId, ret);
             return ret;
         } catch (SQLException e) {
             System.err.println("addActivePoll exception!");
@@ -101,11 +104,8 @@ public class VotesState {
             preStatementDB = connectionToDB.prepareStatement("UPDATE Polls SET active = ? WHERE pollId = ?;");
             preStatementDB.setBoolean(1, false);
             preStatementDB.setInt(2, idDel);
-            for (int i = 0; i < activePolls.size(); ++i)
-                if (activePolls.get(i).getId() == idDel) {
-                    activePolls.remove(i);
-                    break;
-                }
+            preStatementDB.executeUpdate();
+            activePolls.remove(idDel);
         } catch (SQLException e) {
             System.err.println("closePoll exception!");
             e.printStackTrace();
@@ -113,22 +113,21 @@ public class VotesState {
         }
     }
 
-    public static UserVote[] getUserVotes(PlayerState state) {
+    public static Map <Integer, UserVote> getUserVotes(PlayerState state) {
         try {
-            ArrayList <UserVote> ar = new ArrayList<UserVote>();
+            Map <Integer, UserVote> ret = new HashMap<Integer, UserVote>();
             preStatementDB = connectionToDB.prepareStatement("SELECT * FROM UserVotes WHERE userId = ?;");
             preStatementDB.setInt(1, state.getUserId());
             ResultSet resultSetDB = preStatementDB.executeQuery();
             while (resultSetDB.next()) {
                 int optionId = resultSetDB.getInt("optionId");
                 int money = resultSetDB.getInt("money");
-                for (int i = 0; i < activePolls.size(); ++i)
-                    if (activePolls.get(i).containsOption(optionId))
-                        ar.add(new UserVote(activePolls.get(i).getId(), activePolls.get(i).getOptionName(optionId), money));
+                for (Map.Entry <Integer, Poll> e : activePolls.entrySet()) {
+                    Poll pollIt = e.getValue();
+                    if (pollIt.containsOption(optionId))
+                        ret.put(pollIt.getId(), new UserVote(pollIt.getId(), pollIt.getOptionName(optionId), money));
+                }
             }
-            UserVote[] ret = new UserVote[ar.size()];
-            for (int i = 0; i < ret.length; ++i)
-                ret[i] = ar.get(i);
             return ret;
         } catch (SQLException e) {
             System.err.println("getUserVotes exception!");

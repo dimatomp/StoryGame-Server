@@ -9,12 +9,12 @@ import java.util.Map;
  */
 public class VotesInformationResponseMessage {
     private Poll[] polls;
-    private UserVote[] voted;
+    private Map <Integer, UserVote> voted;
 
     public VotesInformationResponseMessage() {
     }
 
-    public VotesInformationResponseMessage(Poll[] polls, UserVote[] voted) {
+    public VotesInformationResponseMessage(Poll[] polls, Map <Integer, UserVote> voted) {
         super();
         this.polls = polls;
         this.voted = voted;
@@ -28,11 +28,11 @@ public class VotesInformationResponseMessage {
         this.polls = polls;
     }
 
-    public UserVote[] getVoted() {
+    public Map <Integer, UserVote> getVoted() {
         return voted;
     }
 
-    public void setVoted(UserVote[] voted) {
+    public void setVoted(Map <Integer, UserVote> voted) {
         this.voted = voted;
     }
 }
