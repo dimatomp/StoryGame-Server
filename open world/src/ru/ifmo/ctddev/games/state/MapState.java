@@ -16,7 +16,8 @@ public class MapState {
     private Field[][] map;
     private int defaultX = N / 2;
     private int defaultY = M / 2;
-
+    private int shopX;
+    private int shopY;
     private Random rnd = new Random(239);
 
     public MapState() {
@@ -33,7 +34,17 @@ public class MapState {
             x = rnd.nextInt(N);
             y = rnd.nextInt(M);
         }
+        shopX = x;
+        shopY = y;
         map[x][y] = Field.SHOP;
+    }
+
+    public int getShopX() {
+        return shopX;
+    }
+
+    public int getShopY() {
+        return shopY;
     }
 
     public int getDefaultX() {
@@ -52,7 +63,7 @@ public class MapState {
         return getValue(x + dx, y + dy) != Field.MOUNTAIN;
     }
 
-    public int[][] getVision(PlayerState state) {
+    public int[][] getVision(Player state) {
         int x = state.getX(), y = state.getY();
         int vision = state.getVision();
         int[][] part = new int[2 * vision + 1][2 * vision + 1];
@@ -64,7 +75,7 @@ public class MapState {
         return part;
     }
 
-    public int[] getNextLayer(PlayerState state, int dx, int dy) {
+    public int[] getNextLayer(Player state, int dx, int dy) {
         int vision = state.getVision();
         int[] layer = new int[2 * vision + 1];
         int fixed = (dy != 0 ? state.getX() : state.getY()) + (dx + dy) * (vision + 1);

@@ -15,9 +15,15 @@ public class VotesInformationResponseMessage {
     }
 
     public VotesInformationResponseMessage(Poll[] polls, Map <Integer, UserVote> voted) {
-        super();
         this.polls = polls;
         this.voted = voted;
+        System.err.println("send votes infomration response message ");
+/*        for (int i = 0; i < polls.length; ++i) {
+            System.err.println(polls[i].getId());
+            for (int j = 0; j < polls[i].getOptionsId().length; ++j)
+                System.err.print(polls[i].getOptionsId()[j] + " " + polls[i].getOptionsName()[j] + " " + polls[i].getMinimalAmount()[j] + "; ");
+            System.err.println("");
+        }*/
     }
 
     public Poll[] getPolls() {

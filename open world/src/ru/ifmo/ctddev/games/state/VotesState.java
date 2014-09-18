@@ -3,7 +3,6 @@ package ru.ifmo.ctddev.games.state;
 import ru.ifmo.ctddev.games.messages.UserVote;
 
 import java.sql.Connection;
-import java.util.ArrayList;
 import java.sql.*;
 import java.util.HashMap;
 import java.util.Map;
@@ -14,7 +13,6 @@ import java.util.Map;
 
 public class VotesState {
     private static Map<Integer, Poll> activePolls;
-    //private static int id = 1;//TODO SHIT, must take from database
     // TODO: There obviously should be synchronization
 
     static Connection connectionToDB;
@@ -35,12 +33,13 @@ public class VotesState {
                 preStatementDB = connectionToDB.prepareStatement("SELECT * FROM Options WHERE pollId = ?;");
                 preStatementDB.setInt(1, pollId);
                 ResultSet allOptions = preStatementDB.executeQuery();
-                int size = allOptions.getFetchSize();
+                int size = SQLExtension.size(allOptions);
                 int[] optionsId = new int[size];
                 String[] optionsName = new String[size];
                 int[] minimalAmount = new int[size];
                 int[] investedMoney = new int[size];
                 for (int i = 0; i < size; ++i) {
+                    allOptions.next();
                     optionsId[i] = allOptions.getInt("optionId");
                     optionsName[i] = allOptions.getString("optionName");
                     minimalAmount[i] = allOptions.getInt("minimalAmount");
@@ -113,7 +112,7 @@ public class VotesState {
         }
     }
 
-    public static Map <Integer, UserVote> getUserVotes(PlayerState state) {
+    public static Map <Integer, UserVote> getUserVotes(Player state) {
         try {
             Map <Integer, UserVote> ret = new HashMap<Integer, UserVote>();
             preStatementDB = connectionToDB.prepareStatement("SELECT * FROM UserVotes WHERE userId = ?;");
@@ -121,7 +120,7 @@ public class VotesState {
             ResultSet resultSetDB = preStatementDB.executeQuery();
             while (resultSetDB.next()) {
                 int optionId = resultSetDB.getInt("optionId");
-                int money = resultSetDB.getInt("money");
+                int money = resultSetDB.getInt("amount");
                 for (Map.Entry <Integer, Poll> e : activePolls.entrySet()) {
                     Poll pollIt = e.getValue();
                     if (pollIt.containsOption(optionId))
@@ -139,12 +138,13 @@ public class VotesState {
 
     public static Poll[] getActivePolls() {
         Poll[] result = new Poll[activePolls.size()];
-        for (int i = 0; i < activePolls.size(); ++i)
-            result[i] = activePolls.get(i);
+        int i = 0;
+        for (Map.Entry <Integer, Poll> e : activePolls.entrySet())
+            result[i++] = e.getValue();
         return result;
     }
 
-    public static boolean vote(PlayerState state, int pollId, String optionName, int amount) {//TODO
+    public static boolean vote(Player state, int pollId, String optionName, int amount) {//TODO
         Poll poll = null;
         for (int i = 0; i < activePolls.size(); ++i)
             if (activePolls.get(i).getId() == pollId)
@@ -155,7 +155,7 @@ public class VotesState {
         if (amount < poll.getMinimalAmountById(optionId))
             return false;
 
-        poll.addInvestedMoney(optionName, amount);
+        poll.vote(optionId, amount);
         try {
             preStatementDB = connectionToDB.prepareStatement("UPDATE Options SET investedMoney = investedMoney + ? WHERE optionId = ?;");
             preStatementDB.setInt(1, amount);

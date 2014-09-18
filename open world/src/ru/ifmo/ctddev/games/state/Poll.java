@@ -23,12 +23,12 @@ public class Poll {
     public Poll() {
     }
 
-    public Poll(int id, String question, int[] optionsId, String[] optionsName, int[] minimalAmounts, int[] investedMoney) {
+    public Poll(int id, String question, int[] optionsId, String[] optionsName, int[] minimalAmount, int[] investedMoney) {
         this.id = id;
         this.question = question;
         this.optionsId = optionsId;
         this.optionsName = optionsName;
-        this.minimalAmount = minimalAmounts;
+        this.minimalAmount = minimalAmount;
         this.investedMoney = investedMoney;
     }
 
@@ -67,10 +67,6 @@ public class Poll {
         return null;
     }
 
-    public int[] getMinimalAmounts() {
-        return minimalAmount;
-    }
-
     public int getMinimalAmountById(int id) {
         return minimalAmount[id];
     }
@@ -91,12 +87,6 @@ public class Poll {
 
     public void setMinimalAmount(int[] minimalAmount) {
         this.minimalAmount = minimalAmount;
-    }
-
-    public void addInvestedMoney(String optionName, int x) {
-        for (int i = 0; i < optionsName.length; ++i)
-            if (optionsName[i].equals(optionName))
-                investedMoney[i] += x;
     }
 
     public int getPriority() {
@@ -138,7 +128,7 @@ public class Poll {
     }
 
 
-    @JsonProperty("optionsId")
+    @JsonIgnore
     public int[] getOptionsId() {
         return optionsId;
     }

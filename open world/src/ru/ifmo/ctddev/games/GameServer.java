@@ -8,20 +8,17 @@ import com.corundumstudio.socketio.listener.*;
 import com.corundumstudio.socketio.*;
 import ru.ifmo.ctddev.games.messages.*;
 import ru.ifmo.ctddev.games.messages.JoinMessage;
-import ru.ifmo.ctddev.games.state.MapState;
-import ru.ifmo.ctddev.games.state.PlayerState;
-import ru.ifmo.ctddev.games.state.Poll;
-import ru.ifmo.ctddev.games.state.VotesState;
+import ru.ifmo.ctddev.games.state.*;
 
 import java.io.IOException;
 import java.util.*;
 import java.sql.*;
 
 public class GameServer {
-    final static Map <UUID, PlayerState> onlineUsers = new HashMap<UUID, PlayerState>();
+    final static Map <UUID, Player> onlineUsers = new HashMap<UUID, Player>();
     final static int SECONDS_PER_DAY = 24 * 3600;
     static SocketIOServer server;
-
+    static Shop shop;
     static MapState map;
 
     static String NAME_OF_DB;
@@ -43,6 +40,7 @@ public class GameServer {
     }
 
     private static void initialization() {
+        shop = new Shop(connectionToDB);
         map = new MapState();
     }
 
@@ -82,12 +80,19 @@ public class GameServer {
             ex.printStackTrace();
             System.exit(0);
         }
+
+        initialization();
+
         System.err.println("Load active polls...");
         VotesState.setDatabase(connectionToDB);
         VotesState.loadActivePolls();
         System.err.println("Successful load active polls!");
 
-        initialization();
+        System.err.println("Load Available items...");
+        shop.loadAvailableItems();
+        System.err.println("Successful load available itmes!");
+
+
         Configuration config = new Configuration();
         config.setHostname(ip);
         config.setPort(port);
@@ -108,19 +113,7 @@ public class GameServer {
         server.addDisconnectListener(new DisconnectListener() {
             @Override
             public void onDisconnect(SocketIOClient socketIOClient) {
-                System.err.println("The client has disconnected");
-                UUID sessionId = socketIOClient.getSessionId();
-                PlayerState userDisjoined = onlineUsers.get(sessionId);
-                String name = userDisjoined.getUserName();
-                int x = userDisjoined.getX();
-                int y = userDisjoined.getY();
-                Iterator <SocketIOClient> itBySockets = server.getAllClients().iterator();
-                while (itBySockets.hasNext()) {
-                    SocketIOClient socket = itBySockets.next();
-                    if (socket.getSessionId() != sessionId)
-                        socket.sendEvent("user_disjoined", new UserDisjoinedBroadcastMessage(name, x, y));
-                }
-                onlineUsers.remove(sessionId);
+                disconnectedUser(socketIOClient);
             }
         });
 
@@ -202,9 +195,42 @@ public class GameServer {
             }
         });
 
+        /*
+            * -> get_store
+            * <- store: {success: boolean, items: {id: int, name: string, type: int, costBuy: int, costSell:int}[]}
+        */
+        server.addEventListener("get_store", GetStoreMessage.class, new DataListener<GetStoreMessage>() {
+            @Override
+            public void onData(SocketIOClient client, GetStoreMessage data, AckRequest ackRequest) throws Exception {
+                getStore(client, data, ackRequest);
+            }
+        });
+
+        /*
+            * -> buy_item {itemId: int, count: int}
+            * <- buy_response {success: boolean, money: int}
+        */
+        server.addEventListener("buy_item", BuyItemMessage.class, new DataListener<BuyItemMessage>() {
+            @Override
+            public void onData(SocketIOClient client, BuyItemMessage data, AckRequest ackRequest) throws Exception {
+                buyItem(client, data, ackRequest);
+            }
+        });
+
+        /*
+            * -> sell_item {itemId: int, count: int}
+            * <- sell_response {success: boolean, money: int}
+        */
+        server.addEventListener("sell_item", SellItemMessage.class, new DataListener<SellItemMessage>() {
+            @Override
+            public void onData(SocketIOClient client, SellItemMessage data, AckRequest ackRequest) throws Exception {
+                sellItem(client, data, ackRequest);
+            }
+        });
+
         server.start();
         Thread.sleep(30000);
-        newVote("This pull works?", new String[] {"Yes", "No"}, new int[] {10, 12});
+        newVote("This pull works #" + new Random(System.currentTimeMillis()), new String[] {"Yes", "No"}, new int[] {10, 12});
         System.err.println("New vote was sent!");
         /*System.out.println("Sending test poll.");
         votesState.addActivePoll("How about now?", new int[]{0, 0}, "Yes", "No");
@@ -215,24 +241,40 @@ public class GameServer {
         server.stop();
     }
 
+    private static void disconnectedUser(SocketIOClient socketIOClient) {//TODO dump to database
+        System.err.println("The client has disconnected");
+        UUID sessionId = socketIOClient.getSessionId();
+        Player userDisjoined = onlineUsers.get(sessionId);
+        String name = userDisjoined.getUserName();
+        int x = userDisjoined.getX();
+        int y = userDisjoined.getY();
+        Iterator <SocketIOClient> itBySockets = server.getAllClients().iterator();
+        while (itBySockets.hasNext()) {
+            SocketIOClient socket = itBySockets.next();
+            if (socket.getSessionId() != sessionId)
+                socket.sendEvent("user_disjoined", new UserDisjoinedBroadcastMessage(name, x, y));
+        }
+        onlineUsers.remove(sessionId);
+    }
+
     //API methods
     private static void joinRequest(SocketIOClient client, JoinMessage data, AckRequest ackRequest) {
         System.err.println("Hello, " + data.getUserName() + "!");
         UUID sessionId = client.getSessionId();
         String name = data.getUserName();
-        PlayerState newOnlineUser = null;
+        Player newOnlineUser = null;
 
         try {
-            preStatementDB = connectionToDB.prepareStatement("SELECT * FROM Users WHERE userId = ?;");
+            preStatementDB = connectionToDB.prepareStatement("SELECT * FROM Users WHERE userName = ?;");
             preStatementDB.setString(1, name);
             resultSetDB = preStatementDB.executeQuery();
-            if (resultSetDB.getFetchSize() == 0) {//new user
+            if (SQLExtension.size(resultSetDB) == 0) {//new user
                 preStatementDB = connectionToDB.prepareStatement("INSERT INTO Users (userName, energy, money, x, y, lastActionTime) " +
                                                                  "VALUES (?, ?, ?, ?, ?, ?);");
                 int currentTime = (int)(System.currentTimeMillis() / 1000);
                 preStatementDB.setString(1, name);
-                preStatementDB.setInt(2, PlayerState.MAX_ENERGY);
-                preStatementDB.setInt(3, PlayerState.DEFAULT_MONEY);
+                preStatementDB.setInt(2, Player.MAX_ENERGY);
+                preStatementDB.setInt(3, Player.DEFAULT_MONEY);
                 preStatementDB.setInt(4, map.getDefaultX());
                 preStatementDB.setInt(5, map.getDefaultY());
                 preStatementDB.setInt(6, currentTime);
@@ -241,15 +283,15 @@ public class GameServer {
                 preStatementDB = connectionToDB.prepareStatement("SELECT LAST_INSERT_ID();");
                 resultSetDB = preStatementDB.executeQuery();
                 resultSetDB.next();
-                newOnlineUser = new PlayerState(resultSetDB.getInt(1), name,
-                        PlayerState.MAX_ENERGY, PlayerState.DEFAULT_MONEY, map.getDefaultX(), map.getDefaultY(), currentTime);
+                newOnlineUser = new Player(resultSetDB.getInt(1), name,
+                        Player.MAX_ENERGY, Player.DEFAULT_MONEY, map.getDefaultX(), map.getDefaultY(), currentTime);
                 onlineUsers.put(sessionId, newOnlineUser);
             } else {
                 preStatementDB = connectionToDB.prepareStatement("SELECT * FROM Users WHERE userName = ?;");
                 preStatementDB.setString(1, name);
                 resultSetDB = preStatementDB.executeQuery();
                 resultSetDB.next();
-                newOnlineUser = new PlayerState(resultSetDB.getInt("userId"), resultSetDB.getString("userName"),
+                newOnlineUser = new Player(resultSetDB.getInt("userId"), resultSetDB.getString("userName"),
                         resultSetDB.getInt("energy"), resultSetDB.getInt("money"), resultSetDB.getInt("x"), resultSetDB.getInt("y"), resultSetDB.getInt("lastActionTime"));
 
                 int currentMidnight = (int)(System.currentTimeMillis() / 1000);
@@ -257,13 +299,30 @@ public class GameServer {
                 currentMidnight *= SECONDS_PER_DAY;
                 if (newOnlineUser.getLastActionTime() < currentMidnight) {
                     int last = (int)(System.currentTimeMillis() / 1000);
-                    newOnlineUser.setEnergy(PlayerState.MAX_ENERGY);
+                    newOnlineUser.setEnergy(Player.MAX_ENERGY);
                     newOnlineUser.setLastActionTime(last);
                     preStatementDB = connectionToDB.prepareStatement("UPDATE Users SET energy = ?, lastActionTime = ? WHERE userId = ?;");
-                    preStatementDB.setInt(1, PlayerState.MAX_ENERGY);
+                    preStatementDB.setInt(1, Player.MAX_ENERGY);
                     preStatementDB.setInt(2, (int)(System.currentTimeMillis() / 1000));
                     preStatementDB.setInt(3, newOnlineUser.getUserId());
                     preStatementDB.executeUpdate();
+                }
+
+                preStatementDB = connectionToDB.prepareStatement("SELECT * FROM UserInventory WHERE userId = ?;");
+                preStatementDB.setInt(1, newOnlineUser.getUserId());
+                resultSetDB = preStatementDB.executeQuery();
+                while (resultSetDB.next()) {
+                    int itemId = resultSetDB.getInt("itemId");
+                    int count = resultSetDB.getInt("count");
+                    preStatementDB = connectionToDB.prepareStatement("SELECT * FROM Items WHERE itemId = ?;");
+                    preStatementDB.setInt(1, itemId);
+                    ResultSet curItemInShop = preStatementDB.executeQuery();
+                    curItemInShop.next();
+                    String nameItem = curItemInShop.getString("name");
+                    int type = curItemInShop.getInt("type");
+                    int costSell = curItemInShop.getInt("costSell");
+                    newOnlineUser.addItems(new InventoryItem(itemId, nameItem, costSell, type), count);
+                    curItemInShop.close();
                 }
                 onlineUsers.put(sessionId, newOnlineUser);
             }
@@ -286,7 +345,7 @@ public class GameServer {
         int dx = data.getDx();
         int dy = data.getDy();
         UUID sessionId = client.getSessionId();
-        PlayerState state = onlineUsers.get(client.getSessionId());
+        Player state = onlineUsers.get(client.getSessionId());
         MoveResponseMessage moveResponseMessage;
         if (map.canMove(state.getX(), state.getY(), dx, dy)) {
             moveResponseMessage = new MoveResponseMessage(true, map.getNextLayer(state, dx, dy), dx, dy);
@@ -307,7 +366,7 @@ public class GameServer {
     }
 
     private static void getState(SocketIOClient client, StateMessage data, AckRequest ackRequest) {
-        PlayerState state = onlineUsers.get(client.getSessionId());
+        Player state = onlineUsers.get(client.getSessionId());
         client.sendEvent("state", new StateMessage(state.getMoney(), state.getEnergy(), state.getX(), state.getY()));
     }
 
@@ -321,12 +380,13 @@ public class GameServer {
 
     //Vote
     private static void voteInformation(SocketIOClient client, VotesInformationRequestMessage data, AckRequest ackRequest) {
-        PlayerState state = onlineUsers.get(client.getSessionId());
-        client.sendEvent("vote_information", new VotesInformationResponseMessage(VotesState.getActivePolls(), VotesState.getUserVotes(state)));
+        Player state = onlineUsers.get(client.getSessionId());
+        client.sendEvent("vote_information", new VotesInformationResponseMessage(VotesState.getActivePolls(),
+                VotesState.getUserVotes(state)));
     }
 
     private static void vote(SocketIOClient client, VoteMessage data, AckRequest ackRequest) {
-        PlayerState state = onlineUsers.get(client.getSessionId());
+        Player state = onlineUsers.get(client.getSessionId());
         boolean result = VotesState.vote(state, data.getId(), data.getOption(), data.getAmount());
         client.sendEvent("vote_response", new VoteResponseMessage(result));
     }
@@ -334,5 +394,33 @@ public class GameServer {
     private static void newVote(String question, String[] optionsName, int[] minimalAmount) {
         Poll poll = VotesState.addActivePoll(question, optionsName, minimalAmount);
         server.getBroadcastOperations().sendEvent("new_vote", new NewVoteBroadcastMessage(poll));
+    }
+
+
+    //Shop
+    private static void getStore(SocketIOClient client, GetStoreMessage data, AckRequest ackRequest) {
+        Player state = onlineUsers.get(client.getSessionId());
+        if (state.getX() != map.getShopX() || state.getY() != map.getShopY())
+            client.sendEvent("store", new StoreMessage(false));
+        else
+            client.sendEvent("store", new StoreMessage(true, shop.getAvailableItems()));
+    }
+
+    private static void buyItem(SocketIOClient client, BuyItemMessage data, AckRequest ackRequest) {
+        Player state = onlineUsers.get(client.getSessionId());
+        if (state.getX() != map.getShopX() || state.getY() != map.getShopY())
+            client.sendEvent("buy_response", new BuyResponseMessage(false, state.getMoney()));
+        else
+            client.sendEvent("buy_response", new BuyResponseMessage(shop.buyItem(state, data.getItemId(),
+                    data.getCount()), state.getMoney()));
+    }
+
+    private static void sellItem(SocketIOClient client, SellItemMessage data, AckRequest ackRequest) {
+        Player state = onlineUsers.get(client.getSessionId());
+        if (state.getX() != map.getShopX() || state.getY() != map.getShopY())
+            client.sendEvent("sell_response", new SellResponseMessage(false, state.getMoney()));
+        else
+            client.sendEvent("sell_response", new SellResponseMessage(shop.sellItem(state, data.getItemId(),
+                    data.getCount()), state.getMoney()));
     }
 }
