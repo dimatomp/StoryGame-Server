@@ -14,6 +14,14 @@ public class InventoryItem {
 
     public InventoryItem() {}
 
+    public InventoryItem(int id, String name, int costSell, int type, int count) {
+        this.id = id;
+        this.name = name;
+        this.costSell = costSell;
+        this.type = type;
+        this.count = count;
+    }
+
     public InventoryItem(int id, String name, int costSell, int type) {
         this.id = id;
         this.name = name;
@@ -46,7 +54,7 @@ public class InventoryItem {
         return count;
     }
 
-    public void addToCount(int x) {
+    public void addCount(int x) {
         count += x;
     }
 

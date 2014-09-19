@@ -20,12 +20,121 @@ public class GameServer {
     static SocketIOServer server;
     static Shop shop;
     static MapState map;
+    static Random helpfulRandom;
 
     static String NAME_OF_DB;
     static String USER;
     static String PASSWORD;
     static Connection connectionToDB;
-    //static timerConnection;
+    static int PERIOD_OF_DUMPING_IN_DATABASE = 30000;
+
+    static class Dumper {//TODO write update inventory
+        private static Connection connection;
+        private static Timer timer;
+        public void setConnection(Connection con) {
+            connection = con;
+        }
+
+        public static void start(int period) {
+            timer = new Timer();
+            timer.schedule(new TimerTask() {
+                @Override
+                public void run() {
+                    String queryUsers = "INSERT INTO Users (userId, energy, money, x, y, lastActionTime) VALUES ";
+                    boolean first = true;
+                    for (Map.Entry <UUID, Player> e : onlineUsers.entrySet()) {
+                        if (!first)
+                            queryUsers += ", (?, ?, ?, ?, ?, ?)";
+                        else
+                            queryUsers += "(?, ?, ?, ?, ?, ?)";
+                        first = false;
+                    }
+                    queryUsers += "ON DUPLICATE KEY UPDATE userId=VALUES(userId), energy=VALUES(energy), money=VALUES(money), " +
+                            "x=VALUES(x), y=VALUES(y), lastActionTime=VALUES(lastActionTime)";
+                    try {
+                        PreparedStatement st = connection.prepareStatement(queryUsers);
+                        int i = 0;
+                        for (Map.Entry <UUID, Player> e : onlineUsers.entrySet()) {
+                            Player player = e.getValue();
+                            st.setInt(i + 1, player.getUserId());
+                            st.setInt(i + 2, player.getEnergy());
+                            st.setInt(i + 3, player.getMoney());
+                            st.setInt(i + 4, player.getX());
+                            st.setInt(i + 5, player.getY());
+                            st.setInt(i + 6, player.getLastActionTime());
+                            i += 6;
+                        }
+                        st.executeUpdate();
+                        st.close();
+
+                        for (Map.Entry <UUID, Player> e : onlineUsers.entrySet()) {
+                            Player player = e.getValue();
+
+                        }
+                        st.close();
+                    } catch (SQLException e) {
+                        System.err.println("Dumper exception!");
+                        e.printStackTrace();
+                        System.exit(0);
+                    }
+                }
+            }, period, period);
+        }
+
+        public static void dump(Player state) {
+            try {
+                PreparedStatement statement = connectionToDB.prepareStatement("UPDATE Users SET energy=?, money=?, x=?, y=?, " +
+                        "lastActionTime=? WHERE userId=?;");
+                statement.setInt(1, state.getEnergy());
+                statement.setInt(2, state.getMoney());
+                statement.setInt(3, state.getX());
+                statement.setInt(4, state.getY());
+                statement.setInt(5, state.getLastActionTime());
+                statement.executeUpdate();
+                statement.close();
+                dumpInventory(state);
+            } catch (Exception e) {
+                System.err.println("Dumping exception");
+                e.printStackTrace();
+                System.exit(0);
+            }
+        }
+
+        private static void dumpInventory(Player player) {
+            try {
+                PreparedStatement st;
+                Map <Integer, InventoryItem> inv = player.getInventory();
+                Map <Integer, InventoryItem> invInDb = loadInventoryFromDatabase(player.getUserId());
+                for (Map.Entry <Integer, InventoryItem> it : inv.entrySet()) {
+                    InventoryItem curInv = it.getValue();
+                    if (curInv.getCount() == 0) {
+                        st = connection.prepareStatement("DELETE FROM UserInventory WHERE userId = ? AND itemId = ?;");
+                        st.setInt(1, player.getUserId());
+                        st.setInt(2, curInv.getId());
+                        st.executeUpdate();
+                    } else if (invInDb.containsKey(curInv.getId())) {
+                        st = connection.prepareStatement("UPDATE UserInventory SET count = ? WHERE userId = ? AND itemId = ?;");
+                        st.setInt(1, curInv.getCount());
+                        st.setInt(2, player.getUserId());
+                        st.setInt(3, curInv.getId());
+                        st.executeUpdate();
+                    } else {
+                        st = connection.prepareStatement("INSERT INTO UserInventory (userId, itemId, count) VALUES(?, ?, ?)");
+                        st.setInt(1, player.getUserId());
+                        st.setInt(2, curInv.getId());
+                        st.setInt(3, curInv.getCount());
+                        st.executeUpdate();
+                    }
+                    st.close();
+                }
+            } catch (SQLException e) {
+                System.err.println("Execute in dumpInventory!");
+                e.printStackTrace();
+                System.exit(0);
+            }
+        }
+    }
+
     class CommandReader implements Runnable {
         @Override
         public void run() {
@@ -40,6 +149,7 @@ public class GameServer {
     private static void initialization() {
         shop = new Shop(connectionToDB);
         map = new MapState();
+        helpfulRandom = new Random(System.currentTimeMillis());
     }
 
     public static void main(String[] args) throws InterruptedException {
@@ -98,7 +208,63 @@ public class GameServer {
         server = new SocketIOServer(config);
 
         System.err.println("The server has started!");
+        addListeners();
 
+        /*try {
+            Dumper.setConnection(DriverManager.getConnection("jdbc:mysql://localhost/" + NAME_OF_DB, USER, PASSWORD));
+            Dumper.start(PERIOD_OF_DUMPING_IN_DATABASE);
+        } catch (Exception e) {
+            System.err.println("Initializate Dumper exception!");
+            e.printStackTrace();
+            System.exit(0);
+        }*/
+
+        server.start();
+        Thread.sleep(30000);
+        newVote("This poll works random " + helpfulRandom.nextInt(), new String[] {"Yes", "No"}, new int[] {10, 12});
+        System.err.println("New vote was sent!");
+        /*System.out.println("Sending test poll.");
+        votesState.addActivePoll("How about now?", new int[]{0, 0}, "Yes", "No");
+        server.getBroadcastOperations().sendEvent("new_vote");*/
+
+        //Thread.sleep(Integer.MAX_VALUE);
+
+        //server.stop();
+    }
+
+    //Methods for work
+    private static Map <Integer, InventoryItem> loadInventoryFromDatabase(int userId) {
+        try {
+            Map <Integer, InventoryItem> inventory = new HashMap<Integer, InventoryItem>();
+            PreparedStatement preStatementDB;
+            ResultSet resultSetDB;
+            preStatementDB = connectionToDB.prepareStatement("SELECT * FROM UserInventory WHERE userId = ?;");
+            preStatementDB.setInt(1, userId);
+            resultSetDB = preStatementDB.executeQuery();
+            while (resultSetDB.next()) {
+                int itemId = resultSetDB.getInt("itemId");
+                int count = resultSetDB.getInt("count");
+                preStatementDB = connectionToDB.prepareStatement("SELECT * FROM Items WHERE itemId = ?;");
+                preStatementDB.setInt(1, itemId);
+                ResultSet curItemInShop = preStatementDB.executeQuery();
+                curItemInShop.next();
+                String nameItem = curItemInShop.getString("name");
+                int type = curItemInShop.getInt("type");
+                int costSell = curItemInShop.getInt("costSell");
+                inventory.put(itemId, new InventoryItem(itemId, nameItem, costSell, type, count));
+                curItemInShop.close();
+            }
+            return inventory;
+        } catch (SQLException e) {
+            System.err.println("Exception in loadInventoryFromDatabase!");
+            e.printStackTrace();
+            System.exit(0);
+        }
+        return null;
+    }
+
+    //Server methods
+    private static void addListeners() {
         //New user connected
         server.addConnectListener(new ConnectListener() {
             @Override
@@ -226,20 +392,19 @@ public class GameServer {
             }
         });
 
-        server.start();
-        Thread.sleep(30000);
-        newVote("This pull works #" + new Random(System.currentTimeMillis()), new String[] {"Yes", "No"}, new int[] {10, 12});
-        System.err.println("New vote was sent!");
-        /*System.out.println("Sending test poll.");
-        votesState.addActivePoll("How about now?", new int[]{0, 0}, "Yes", "No");
-        server.getBroadcastOperations().sendEvent("new_vote");*/
-
-        Thread.sleep(Integer.MAX_VALUE);
-
-        server.stop();
+        /*
+            * -> get_inventory
+            * <- inventory: {items: {itemId: int, name: string, type: int, costSell:int, count: int}[]}
+        */
+        server.addEventListener("get_inventory", GetInventoryMessage.class, new DataListener<GetInventoryMessage>() {
+            @Override
+            public void onData(SocketIOClient client, GetInventoryMessage data, AckRequest ackRequest) throws Exception {
+                getInventory(client, data, ackRequest);
+            }
+        });
     }
 
-    private static void disconnectedUser(SocketIOClient socketIOClient) {//TODO dump to database
+    private static void disconnectedUser(SocketIOClient socketIOClient) {//TODO
         System.err.println("The client has disconnected");
         UUID sessionId = socketIOClient.getSessionId();
         Player userDisjoined = onlineUsers.get(sessionId);
@@ -252,6 +417,7 @@ public class GameServer {
             if (socket.getSessionId() != sessionId)
                 socket.sendEvent("user_disjoined", new UserDisjoinedBroadcastMessage(name, x, y));
         }
+        //Dumper.dump(userDisjoined);
         onlineUsers.remove(sessionId);
     }
 
@@ -269,6 +435,7 @@ public class GameServer {
             preStatementDB = connectionToDB.prepareStatement("SELECT * FROM Users WHERE userName = ?;");
             preStatementDB.setString(1, name);
             resultSetDB = preStatementDB.executeQuery();
+
             if (SQLExtension.size(resultSetDB) == 0) {//new user
                 preStatementDB = connectionToDB.prepareStatement("INSERT INTO Users (userName, energy, money, x, y, lastActionTime) " +
                                                                  "VALUES (?, ?, ?, ?, ?, ?);");
@@ -286,11 +453,7 @@ public class GameServer {
                 resultSetDB.next();
                 newOnlineUser = new Player(resultSetDB.getInt(1), name,
                         Player.MAX_ENERGY, Player.DEFAULT_MONEY, map.getDefaultX(), map.getDefaultY(), currentTime);
-                onlineUsers.put(sessionId, newOnlineUser);
             } else {
-                preStatementDB = connectionToDB.prepareStatement("SELECT * FROM Users WHERE userName = ?;");
-                preStatementDB.setString(1, name);
-                resultSetDB = preStatementDB.executeQuery();
                 resultSetDB.next();
                 newOnlineUser = new Player(resultSetDB.getInt("userId"), resultSetDB.getString("userName"),
                         resultSetDB.getInt("energy"), resultSetDB.getInt("money"), resultSetDB.getInt("x"), resultSetDB.getInt("y"), resultSetDB.getInt("lastActionTime"));
@@ -308,26 +471,12 @@ public class GameServer {
                     preStatementDB.setInt(3, newOnlineUser.getUserId());
                     preStatementDB.executeUpdate();
                 }
-
-                preStatementDB = connectionToDB.prepareStatement("SELECT * FROM UserInventory WHERE userId = ?;");
-                preStatementDB.setInt(1, newOnlineUser.getUserId());
-                resultSetDB = preStatementDB.executeQuery();
-                while (resultSetDB.next()) {
-                    int itemId = resultSetDB.getInt("itemId");
-                    int count = resultSetDB.getInt("count");
-                    preStatementDB = connectionToDB.prepareStatement("SELECT * FROM Items WHERE itemId = ?;");
-                    preStatementDB.setInt(1, itemId);
-                    ResultSet curItemInShop = preStatementDB.executeQuery();
-                    curItemInShop.next();
-                    String nameItem = curItemInShop.getString("name");
-                    int type = curItemInShop.getInt("type");
-                    int costSell = curItemInShop.getInt("costSell");
-                    newOnlineUser.addItems(new InventoryItem(itemId, nameItem, costSell, type), count);
-                    curItemInShop.close();
-                }
-                onlineUsers.put(sessionId, newOnlineUser);
+                preStatementDB.close();
+                Map <Integer, InventoryItem> invdb = loadInventoryFromDatabase(newOnlineUser.getUserId());
+                newOnlineUser.setInventory(invdb);
             }
-            preStatementDB.close();
+            onlineUsers.put(sessionId, newOnlineUser);
+
         } catch (Exception e) {
             client.sendEvent("start", new StartMessage(false));
             e.printStackTrace();
@@ -375,9 +524,17 @@ public class GameServer {
         client.sendEvent("map", new MapMessage(map.getField()));
     }
 
-    private static void dig(SocketIOClient client, DigMessage data, AckRequest ackRequest) {
+    private static void dig(SocketIOClient client, DigMessage data, AckRequest ackRequest) {//TODO write dig
+        final int PROBABLY_DIG = 50;
+        Player state = onlineUsers.get(client.getSessionId());
+        InventoryItem digitem = null;
+        if ((state.getX() != map.getShopX() || state.getY() != map.getShopY()) && Math.abs(helpfulRandom.nextInt()) % 100 < PROBABLY_DIG) {
 
+        } else {
+
+        }
     }
+
 
     //Vote
     private static void voteInformation(SocketIOClient client, VotesInformationRequestMessage data, AckRequest ackRequest) {
@@ -387,8 +544,10 @@ public class GameServer {
     }
 
     private static void vote(SocketIOClient client, VoteMessage data, AckRequest ackRequest) {
+        System.err.println("new vote from user");
         Player state = onlineUsers.get(client.getSessionId());
         boolean result = VotesState.vote(state, data.getId(), data.getOption(), data.getAmount());
+        System.err.println("vote_response " + result);
         client.sendEvent("vote_response", new VoteResponseMessage(result));
     }
 
@@ -396,7 +555,6 @@ public class GameServer {
         Poll poll = VotesState.addActivePoll(question, optionsName, minimalAmount);
         server.getBroadcastOperations().sendEvent("new_vote", new NewVoteBroadcastMessage(poll));
     }
-
 
     //Shop
     private static void getStore(SocketIOClient client, GetStoreMessage data, AckRequest ackRequest) {
@@ -423,5 +581,11 @@ public class GameServer {
         else
             client.sendEvent("sell_response", new SellResponseMessage(shop.sellItem(state, data.getItemId(),
                     data.getCount()), state.getMoney()));
+    }
+
+    //Inventory
+    public static void getInventory(SocketIOClient client, GetInventoryMessage data, AckRequest ackRequest) {
+        Player state = onlineUsers.get(client.getSessionId());
+        client.sendEvent("inventory", new InventoryMessage(state.getInventory()));
     }
 }

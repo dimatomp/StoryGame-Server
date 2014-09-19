@@ -81,7 +81,7 @@ public class Poll {
     public int getOptionId(String name) {
         for (int i = 0; i < optionsName[i].length(); ++i)
             if (optionsName[i].equals(name))
-                return i;
+                return optionsId[i];
         return -1;
     }
 

@@ -1,7 +1,5 @@
 package ru.ifmo.ctddev.games.state;
 
-import ru.ifmo.ctddev.games.messages.UserVote;
-
 import java.util.Map;
 import java.util.HashMap;
 
@@ -45,7 +43,7 @@ public class Player {
         if (!inventory.containsKey(id))
             inventory.put(id, new InventoryItem(item.getId(), item.getName(), item.getCostSell(), item.getType()));
         InventoryItem cur = inventory.get(id);
-        cur.addToCount(count);
+        cur.addCount(count);
         inventory.put(id, cur);
     }
 

@@ -28,7 +28,7 @@ public class Shop {
                 String name = resultSet.getString("name");
                 int type = resultSet.getInt("type");
                 int costBuy = resultSet.getInt("costBuy");
-                int costSell = resultSet.getByte("costSell");
+                int costSell = resultSet.getInt("costSell");
                 items.put(id, new Item(id, name, type, costBuy, costSell));
             }
             resultSet.close();

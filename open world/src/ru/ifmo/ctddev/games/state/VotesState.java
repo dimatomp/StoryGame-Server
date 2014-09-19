@@ -1,6 +1,6 @@
 package ru.ifmo.ctddev.games.state;
 
-import ru.ifmo.ctddev.games.messages.UserVote;
+import ru.ifmo.ctddev.games.messages.UserVoteMessage;
 
 import java.sql.Connection;
 import java.sql.*;
@@ -114,9 +114,9 @@ public class VotesState {
         }
     }
 
-    public static Map <Integer, UserVote> getUserVotes(Player state) {
+    public static Map <Integer, UserVoteMessage> getUserVotes(Player state) {
         try {
-            Map <Integer, UserVote> ret = new HashMap<Integer, UserVote>();
+            Map <Integer, UserVoteMessage> ret = new HashMap<Integer, UserVoteMessage>();
             PreparedStatement preStatementDB;
             preStatementDB = connectionToDB.prepareStatement("SELECT * FROM UserVotes WHERE userId = ?;");
             preStatementDB.setInt(1, state.getUserId());
@@ -127,7 +127,7 @@ public class VotesState {
                 for (Map.Entry <Integer, Poll> e : activePolls.entrySet()) {
                     Poll pollIt = e.getValue();
                     if (pollIt.containsOption(optionId))
-                        ret.put(pollIt.getId(), new UserVote(pollIt.getId(), pollIt.getOptionName(optionId), money));
+                        ret.put(pollIt.getId(), new UserVoteMessage(pollIt.getId(), pollIt.getOptionName(optionId), money));
                 }
             }
             return ret;
@@ -147,19 +147,27 @@ public class VotesState {
         return result;
     }
 
+    static enum Vote {
+        NO, ALREADY, OTHER
+    }
+
     public static boolean vote(Player state, int pollId, String optionName, int amount) {//TODO
         Poll poll = null;
-        for (int i = 0; i < activePolls.size(); ++i)
-            if (activePolls.get(i).getId() == pollId)
-                poll = activePolls.get(i);
+        for (Map.Entry <Integer, Poll> e : activePolls.entrySet())
+            if (e.getValue().getId() == pollId)
+                poll = e.getValue();
+
         if (poll == null || !poll.containsOption(optionName))
             return false;
         int optionId = poll.getOptionId(optionName);
-        if (amount < poll.getMinimalAmountById(optionId))
+        System.err.println("Check can vote");
+        Vote r = canVote(pollId, optionId, state);
+        if (!(r == Vote.ALREADY || r == Vote.NO && amount >= poll.getMinimalAmountById(optionId)))
             return false;
+        System.err.println("Checked can vote");
 
-        poll.vote(optionId, amount);
         try {
+            System.err.println("add vote in database!");
             PreparedStatement preStatementDB;
             preStatementDB = connectionToDB.prepareStatement("UPDATE Options SET investedMoney = investedMoney + ? WHERE optionId = ?;");
             preStatementDB.setInt(1, amount);
@@ -171,6 +179,10 @@ public class VotesState {
             preStatementDB.setInt(2, optionId);
             preStatementDB.setInt(3, amount);
             preStatementDB.executeUpdate();
+            preStatementDB.close();
+
+            poll.vote(optionId, amount);
+            System.err.println("finish add vote in database!");
             return true;
         } catch (SQLException e) {
             System.out.println("vote exception!");
@@ -178,5 +190,47 @@ public class VotesState {
             System.exit(0);
         }
         return false;
+    }
+
+    private static Vote canVote(int pollId, int optionId, Player user) {
+        try {
+            PreparedStatement preStatementDB;
+            preStatementDB = connectionToDB.prepareStatement("SELECT * FROM Options WHERE pollId = ?;");
+            preStatementDB.setInt(1, pollId);
+            ResultSet optionsInPoll = preStatementDB.executeQuery();
+            String query = "SELECT * FROM UserVotes WHERE userId = ? AND (";
+            boolean first = true;
+            while (optionsInPoll.next()) {
+                if (first)
+                    query += String.format("optionId = " + optionsInPoll.getInt("optionId"));
+                else
+                    query += String.format("OR optionId = " + optionsInPoll.getInt("optionId"));
+                first = false;
+            }
+            optionsInPoll.close();
+            query += ");";
+            System.err.println("prevVote = " + query);
+            preStatementDB = connectionToDB.prepareStatement(query);
+            preStatementDB.setInt(1, user.getUserId());
+            ResultSet prevVotes = preStatementDB.executeQuery();
+
+            int sz = SQLExtension.size(prevVotes);
+            prevVotes.next();
+            boolean diffVote = prevVotes.getInt("optionId") != optionId;
+            preStatementDB.close();
+
+            if (sz == 0)
+                return Vote.NO;
+            if (sz == 2)
+                throw new RuntimeException("Duplicate votes for one poll from user!");
+            if (diffVote)
+                return Vote.OTHER;
+            return Vote.ALREADY;
+        } catch (SQLException e) {
+            System.err.println("hasAlreadyVotePoll");
+            e.printStackTrace();
+            System.exit(0);
+        }
+        return Vote.NO;
     }
 }

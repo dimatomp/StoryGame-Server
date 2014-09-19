@@ -18,7 +18,7 @@ public class MapState {
     private int defaultY = M / 2;
     private int shopX;
     private int shopY;
-    private Random rnd = new Random(239);
+    private Random rnd = new Random(System.currentTimeMillis());
 
     public MapState() {
         map = new Field[N][M];

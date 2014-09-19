@@ -9,21 +9,14 @@ import java.util.Map;
  */
 public class VotesInformationResponseMessage {
     private Poll[] polls;
-    private Map <Integer, UserVote> voted;
+    private Map <Integer, UserVoteMessage> voted;
 
     public VotesInformationResponseMessage() {
     }
 
-    public VotesInformationResponseMessage(Poll[] polls, Map <Integer, UserVote> voted) {
+    public VotesInformationResponseMessage(Poll[] polls, Map <Integer, UserVoteMessage> voted) {
         this.polls = polls;
         this.voted = voted;
-        System.err.println("send votes infomration response message ");
-/*        for (int i = 0; i < polls.length; ++i) {
-            System.err.println(polls[i].getId());
-            for (int j = 0; j < polls[i].getOptionsId().length; ++j)
-                System.err.print(polls[i].getOptionsId()[j] + " " + polls[i].getOptionsName()[j] + " " + polls[i].getMinimalAmount()[j] + "; ");
-            System.err.println("");
-        }*/
     }
 
     public Poll[] getPolls() {
@@ -34,11 +27,11 @@ public class VotesInformationResponseMessage {
         this.polls = polls;
     }
 
-    public Map <Integer, UserVote> getVoted() {
+    public Map <Integer, UserVoteMessage> getVoted() {
         return voted;
     }
 
-    public void setVoted(Map <Integer, UserVote> voted) {
+    public void setVoted(Map <Integer, UserVoteMessage> voted) {
         this.voted = voted;
     }
 }
