@@ -198,7 +198,7 @@ public class GameServer {
 
         System.err.println("Load Available items...");
         shop.loadAvailableItems();
-        System.err.println("Successful load available itmes!");
+        System.err.println("Successful load available items!");
 
 
         Configuration config = new Configuration();
@@ -221,11 +221,8 @@ public class GameServer {
 
         server.start();
         Thread.sleep(30000);
-        newVote("This poll works random " + helpfulRandom.nextInt(), new String[] {"Yes", "No"}, new int[] {10, 12});
-        System.err.println("New vote was sent!");
-        /*System.out.println("Sending test poll.");
-        votesState.addActivePoll("How about now?", new int[]{0, 0}, "Yes", "No");
-        server.getBroadcastOperations().sendEvent("new_vote");*/
+        //newVote("This poll works random " + helpfulRandom.nextInt(), new String[] {"Yes", "No"}, new int[] {10, 12});
+        //System.err.println("New vote was sent!");
 
         //Thread.sleep(Integer.MAX_VALUE);
 
@@ -526,13 +523,54 @@ public class GameServer {
 
     private static void dig(SocketIOClient client, DigMessage data, AckRequest ackRequest) {//TODO write dig
         final int PROBABLY_DIG = 50;
+        final int ENERGY_GRASS = 10;
+        final int ENERGY_DESERT = 7;
+        final double ADD_PROBABLY = 0.2;
+        final int ADD_COUNT = 1;
+
         Player state = onlineUsers.get(client.getSessionId());
-        InventoryItem digitem = null;
-        if ((state.getX() != map.getShopX() || state.getY() != map.getShopY()) && Math.abs(helpfulRandom.nextInt()) % 100 < PROBABLY_DIG) {
+        int x = state.getX();
+        int y = state.getY();
+        int energy = (map.getValue(x, y) == MapState.Field.GRASS ? ENERGY_GRASS : ENERGY_DESERT);
+        if ((x != map.getShopX() || y != map.getShopY()) && Math.abs(helpfulRandom.nextInt()) % 100 < PROBABLY_DIG && state.getEnergy() >= energy) {
+            Map <Integer, Item> items = shop.getAvailableItems();
+            Item[] srt = new Item[items.size()];
+            int it = 0;
+            for (Map.Entry <Integer, Item> e : items.entrySet())
+                srt[it++] = e.getValue();
+            Arrays.sort(srt, 0, srt.length, new Comparator<Item>() {
+                @Override
+                public int compare(Item o1, Item o2) {
+                    if (o1.getCostBuy() < o2.getCostBuy())
+                        return -1;
+                    if (o1.getCostBuy() == o2.getCostBuy())
+                        return 0;
+                    return 1;
+                }
+            });
+            double totalSum = 0;
+            for (int j = 0; j < srt.length; ++j)
+                totalSum += 1.0 / srt[j].getCostBuy();
 
-        } else {
-
-        }
+            Item found = null;
+            double probably = Math.min(helpfulRandom.nextDouble() +
+                    (map.getValue(x, y) == MapState.Field.GRASS ? ADD_PROBABLY : 0), 1);
+            double sum = 0;
+            for (int i = 0; i < srt.length; ++i) {
+                sum += (1.0 / srt[i].getCostBuy()) / totalSum;
+                if (sum >= probably) {
+                    found = srt[i];
+                    break;
+                }
+            }
+            int count = Math.abs(helpfulRandom.nextInt()) % 4 + 1;
+            count += (map.getValue(x, y) == MapState.Field.GRASS ? ADD_COUNT : 0);
+            state.setEnergy(state.getEnergy() - energy);
+            state.addItems(new InventoryItem(found), count);
+            client.sendEvent("dig_response", new DigResponseMessage(found.getId(), found.getName(), found.getCostSell(),
+                    count, found.getType(), state.getEnergy()));
+        } else
+            client.sendEvent("dig_response", new DigResponseMessage(0, "", 0, 0, 0, state.getEnergy()));
     }
 
 
@@ -547,7 +585,6 @@ public class GameServer {
         System.err.println("new vote from user");
         Player state = onlineUsers.get(client.getSessionId());
         boolean result = VotesState.vote(state, data.getId(), data.getOption(), data.getAmount());
-        System.err.println("vote_response " + result);
         client.sendEvent("vote_response", new VoteResponseMessage(result));
     }
 

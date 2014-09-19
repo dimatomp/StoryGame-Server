@@ -33,7 +33,9 @@ public class Poll {
     }
 
     public void vote(int option, int amount) {
-        investedMoney[option] += amount;
+        for (int i = 0; i < optionsId.length; ++i)
+            if (optionsId[i] == option)
+                investedMoney[i] += amount;
     }
 
     public int getId() {
@@ -68,7 +70,10 @@ public class Poll {
     }
 
     public int getMinimalAmountById(int id) {
-        return minimalAmount[id];
+        for (int i = 0; i < optionsName[i].length(); ++i)
+            if (optionsId[i] == id)
+                return minimalAmount[i];
+        return -1;
     }
 
     public int getMinimalAmountByName(String name) {

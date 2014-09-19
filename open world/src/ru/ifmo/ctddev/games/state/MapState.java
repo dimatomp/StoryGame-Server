@@ -59,6 +59,14 @@ public class MapState {
         return 0 <= x && x < map.length && 0 <= y && y < map[0].length ? map[x][y] : Field.MOUNTAIN;
     }
 
+    /*public int digEnergy(int x, int y) {
+        if (map[x][y] == Field.DESERT)
+            return 7;
+        if (map[x][y] == Field.GRASS)
+            return 10;
+        return 0;
+    }*/
+
     public boolean canMove(int x, int y, int dx, int dy) {
         return getValue(x + dx, y + dy) != Field.MOUNTAIN;
     }
@@ -67,21 +75,18 @@ public class MapState {
         int x = state.getX(), y = state.getY();
         int vision = state.getVision();
         int[][] part = new int[2 * vision + 1][2 * vision + 1];
-        for (int i = x - vision; i <= x + vision; i++) {
-            for (int j = y - vision; j <= y + vision; j++) {
+        for (int i = x - vision; i <= x + vision; i++)
+            for (int j = y - vision; j <= y + vision; j++)
                 part[i - (x - vision)][j - (y - vision)] = getValue(i, j).ordinal();
-            }
-        }
         return part;
     }
 
     public int[] getNextLayer(Player state, int dx, int dy) {
         int vision = state.getVision();
         int[] layer = new int[2 * vision + 1];
-        int fixed = (dy != 0 ? state.getX() : state.getY()) + (dx + dy) * (vision + 1);
-        for (int i = 0; i < layer.length; i++) {
-            layer[i] = (dy != 0 ? getValue(fixed, i - vision + state.getY()) : getValue(i - vision + state.getX(), fixed)).ordinal();
-        }
+        int fixed = (dx != 0 ? state.getX() : state.getY()) + (dx + dy) * (vision + 1);
+        for (int i = 0; i < layer.length; i++)
+            layer[i] = (dx != 0 ? getValue(fixed, i - vision + state.getY()) : getValue(i - vision + state.getX(), fixed)).ordinal();
         return layer;
     }
 
