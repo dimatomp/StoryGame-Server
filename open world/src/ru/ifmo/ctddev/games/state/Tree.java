@@ -11,7 +11,7 @@ import ru.ifmo.ctddev.games.state.Node;
 public class Tree {
     private ArrayList <ArrayList <Integer> > g;
     private ArrayList <String> name;
-    private ArrayList <Integer> progress;
+    private ArrayList <Double> progress;
     private ArrayList<Node> nodes = new ArrayList<Node>();
     private int root;
     private int[] level;
@@ -22,11 +22,11 @@ public class Tree {
     public Tree(int n) {
         g = new ArrayList<ArrayList<Integer>>();
         name = new ArrayList<String>();
-        progress = new ArrayList<Integer>();
+        progress = new ArrayList<Double>();
         for (int i = 0; i < n; ++i) {
             g.add(new ArrayList<Integer>());
             name.add("");
-            progress.add(0);
+            progress.add(0.0);
         }
         level = new int[n];
     }
@@ -52,7 +52,7 @@ public class Tree {
         return size;
     }
 
-    public void addEdge(int p, int to, String name, int progress) {
+    public void addEdge(int p, int to, String name, double progress) {
         int v2 = getIdVertex(to);
         if (p == 0) {
             this.name.set(v2, name);

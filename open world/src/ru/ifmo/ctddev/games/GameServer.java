@@ -627,6 +627,7 @@ public class GameServer {
             int count = Math.abs(helpfulRandom.nextInt()) % MAX_COUNT_FIND + 1;
             count += (map.getValue(x, y) == MapState.Field.GRASS ? ADD_COUNT : 0);
             state.addEnergy(-energy);
+            state.setLastActionTime((int)(System.currentTimeMillis() / 1000));
             state.addItems(new InventoryItem(found), count);
             client.sendEvent("dig_response", new DigResponseMessage(found.getId(), found.getName(), found.getCostSell(),
                     count, found.getType(), state.getEnergy()));
@@ -659,8 +660,8 @@ public class GameServer {
         boolean result = VotesState.vote(state, data.getId(), data.getOption(), data.getAmount());
         client.sendEvent("vote_response", new VoteResponseMessage(result));
 
-        final int THRESHOLD = 1000;
         if (result) {
+            final int THRESHOLD = 1000;
             int amount = data.getAmount(), s = 0, ai = 0;
             Poll poll = VotesState.getPollById(data.getId());
             int[] invMoney = poll.getInvestedMoney();
@@ -676,7 +677,7 @@ public class GameServer {
             addProgress *= 1.0 * level / THRESHOLD;
             try {
                 PreparedStatement preStatementDB;
-                preStatementDB = connectionToDB.prepareStatement("UPDATE Tree SET progress = progress + ? WHERE name = ?;");
+                preStatementDB = connectionToDB.prepareStatement("UPDATE Tree SET progress = LEAST(100, progress + ?) WHERE name = ?;");
                 preStatementDB.setDouble(1, addProgress);
                 preStatementDB.setString(2, data.getOption());
                 preStatementDB.executeUpdate();
@@ -739,7 +740,7 @@ public class GameServer {
                 int nodeId = resultSetDB.getInt("nodeId");
                 int parent = resultSetDB.getInt("parentId");
                 String name = resultSetDB.getString("name");
-                int progress = resultSetDB.getInt("progress");
+                double progress = resultSetDB.getDouble("progress");
                 tree.addEdge(parent, nodeId, name, progress);
             }
             preStatementDB.close();

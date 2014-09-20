@@ -7,13 +7,13 @@ public class Node {
     private int id;
     private int parent;
     private String name;
-    private int progress;
+    private double progress;
     private int x;
     private int y;
 
     public Node() {}
 
-    public Node(int id, int parent, String name, int progress, int x, int y) {
+    public Node(int id, int parent, String name, double progress, int x, int y) {
         this.id = id;
         this.parent = parent;
         this.name = name;
@@ -34,7 +34,7 @@ public class Node {
         return name;
     }
 
-    public int getProgress() {
+    public double getProgress() {
         return progress;
     }
 

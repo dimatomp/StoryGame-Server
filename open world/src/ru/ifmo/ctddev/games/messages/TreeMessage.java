@@ -10,7 +10,7 @@ public class TreeMessage {
     private int[] id;
     private int[] parent;
     private String[] name;
-    private int[] progress;
+    private double[] progress;
     private int[] x;
     private int[] y;
     public TreeMessage() {}
@@ -18,7 +18,7 @@ public class TreeMessage {
         id = new int[nodes.length];
         parent = new int[nodes.length];
         name = new String[nodes.length];
-        progress = new int[nodes.length];
+        progress = new double[nodes.length];
         x = new int[nodes.length];
         y = new int[nodes.length];
         for (int i = 0; i < nodes.length; ++i) {
@@ -43,7 +43,7 @@ public class TreeMessage {
         return name;
     }
 
-    public int[] getProgress() {
+    public double[] getProgress() {
         return progress;
     }
 
@@ -67,7 +67,7 @@ public class TreeMessage {
         this.name = name;
     }
 
-    public void setProgress(int[] progress) {
+    public void setProgress(double[] progress) {
         this.progress = progress;
     }
 
