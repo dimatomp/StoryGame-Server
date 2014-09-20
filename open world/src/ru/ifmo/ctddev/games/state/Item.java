@@ -16,6 +16,7 @@ public class Item {
         this.name = name;
         this.costBuy = costBuy;
         this.costSell = costSell;
+        this.type = type;
     }
 
     public int getId() {

@@ -34,6 +34,7 @@ public class MapState {
             x = rnd.nextInt(N);
             y = rnd.nextInt(M);
         }
+        x = y = 0;
         shopX = x;
         shopY = y;
         map[x][y] = Field.SHOP;

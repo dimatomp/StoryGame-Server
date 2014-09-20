@@ -26,12 +26,14 @@ public class GameServer {
     static String USER;
     static String PASSWORD;
     static Connection connectionToDB;
-    static int PERIOD_OF_DUMPING_IN_DATABASE = 30000;
+    static int PERIOD_OF_DUMPING_IN_DATABASE = 60000;
+
+    final static boolean DEBUG_WITH_DUMPING = true;
 
     static class Dumper {//TODO write update inventory
         private static Connection connection;
         private static Timer timer;
-        public void setConnection(Connection con) {
+        public static void setConnection(Connection con) {
             connection = con;
         }
 
@@ -40,38 +42,41 @@ public class GameServer {
             timer.schedule(new TimerTask() {
                 @Override
                 public void run() {
-                    String queryUsers = "INSERT INTO Users (userId, energy, money, x, y, lastActionTime) VALUES ";
+                    System.err.println("IN Dumper.run");
+                    if (onlineUsers.size() == 0)
+                        return;
+                    String queryUsers = "INSERT INTO Users (userId, userName, energy, money, x, y, lastActionTime) VALUES ";
                     boolean first = true;
                     for (Map.Entry <UUID, Player> e : onlineUsers.entrySet()) {
                         if (!first)
-                            queryUsers += ", (?, ?, ?, ?, ?, ?)";
+                            queryUsers += ", (?, ?, ?, ?, ?, ?, ?)";
                         else
-                            queryUsers += "(?, ?, ?, ?, ?, ?)";
+                            queryUsers += "(?, ?, ?, ?, ?, ?, ?)";
                         first = false;
                     }
-                    queryUsers += "ON DUPLICATE KEY UPDATE userId=VALUES(userId), energy=VALUES(energy), money=VALUES(money), " +
-                            "x=VALUES(x), y=VALUES(y), lastActionTime=VALUES(lastActionTime)";
+                    queryUsers += " ON DUPLICATE KEY UPDATE userId=VALUES(userId), userName = VALUES(userName), energy=VALUES(energy), money=VALUES(money), " +
+                            "x=VALUES(x), y=VALUES(y), lastActionTime=VALUES(lastActionTime);";
                     try {
                         PreparedStatement st = connection.prepareStatement(queryUsers);
                         int i = 0;
                         for (Map.Entry <UUID, Player> e : onlineUsers.entrySet()) {
                             Player player = e.getValue();
                             st.setInt(i + 1, player.getUserId());
-                            st.setInt(i + 2, player.getEnergy());
-                            st.setInt(i + 3, player.getMoney());
-                            st.setInt(i + 4, player.getX());
-                            st.setInt(i + 5, player.getY());
-                            st.setInt(i + 6, player.getLastActionTime());
-                            i += 6;
+                            st.setString(i + 2, player.getUserName());
+                            st.setInt(i + 3, player.getEnergy());
+                            st.setInt(i + 4, player.getMoney());
+                            st.setInt(i + 5, player.getX());
+                            st.setInt(i + 6, player.getY());
+                            st.setInt(i + 7, player.getLastActionTime());
+                            i += 7;
                         }
                         st.executeUpdate();
                         st.close();
 
                         for (Map.Entry <UUID, Player> e : onlineUsers.entrySet()) {
                             Player player = e.getValue();
-
+                            dumpInventory(player);
                         }
-                        st.close();
                     } catch (SQLException e) {
                         System.err.println("Dumper exception!");
                         e.printStackTrace();
@@ -83,6 +88,7 @@ public class GameServer {
 
         public static void dump(Player state) {
             try {
+                System.err.println("dump player");
                 PreparedStatement statement = connectionToDB.prepareStatement("UPDATE Users SET energy=?, money=?, x=?, y=?, " +
                         "lastActionTime=? WHERE userId=?;");
                 statement.setInt(1, state.getEnergy());
@@ -90,6 +96,7 @@ public class GameServer {
                 statement.setInt(3, state.getX());
                 statement.setInt(4, state.getY());
                 statement.setInt(5, state.getLastActionTime());
+                statement.setInt(6, state.getUserId());
                 statement.executeUpdate();
                 statement.close();
                 dumpInventory(state);
@@ -119,7 +126,7 @@ public class GameServer {
                         st.setInt(3, curInv.getId());
                         st.executeUpdate();
                     } else {
-                        st = connection.prepareStatement("INSERT INTO UserInventory (userId, itemId, count) VALUES(?, ?, ?)");
+                        st = connection.prepareStatement("INSERT INTO UserInventory (userId, itemId, count) VALUES(?, ?, ?);");
                         st.setInt(1, player.getUserId());
                         st.setInt(2, curInv.getId());
                         st.setInt(3, curInv.getCount());
@@ -210,14 +217,16 @@ public class GameServer {
         System.err.println("The server has started!");
         addListeners();
 
-        /*try {
-            Dumper.setConnection(DriverManager.getConnection("jdbc:mysql://localhost/" + NAME_OF_DB, USER, PASSWORD));
-            Dumper.start(PERIOD_OF_DUMPING_IN_DATABASE);
-        } catch (Exception e) {
-            System.err.println("Initializate Dumper exception!");
-            e.printStackTrace();
-            System.exit(0);
-        }*/
+        if (DEBUG_WITH_DUMPING) {
+            try {
+                Dumper.setConnection(DriverManager.getConnection("jdbc:mysql://localhost/" + NAME_OF_DB, USER, PASSWORD));
+                Dumper.start(PERIOD_OF_DUMPING_IN_DATABASE);
+            } catch (Exception e) {
+                System.err.println("Initializate Dumper exception!");
+                e.printStackTrace();
+                System.exit(0);
+            }
+        }
 
         server.start();
         Thread.sleep(30000);
@@ -399,9 +408,16 @@ public class GameServer {
                 getInventory(client, data, ackRequest);
             }
         });
+
+        server.addEventListener("get_tree", GetTreeMessage.class, new DataListener<GetTreeMessage>() {
+            @Override
+            public void onData(SocketIOClient client, GetTreeMessage data, AckRequest ackRequest) throws Exception {
+                getTree(client, data, ackRequest);
+            }
+        });
     }
 
-    private static void disconnectedUser(SocketIOClient socketIOClient) {//TODO
+    private static void disconnectedUser(SocketIOClient socketIOClient) {//TODO WRITE CORRECT DISCONNECTED
         System.err.println("The client has disconnected");
         UUID sessionId = socketIOClient.getSessionId();
         Player userDisjoined = onlineUsers.get(sessionId);
@@ -414,7 +430,8 @@ public class GameServer {
             if (socket.getSessionId() != sessionId)
                 socket.sendEvent("user_disjoined", new UserDisjoinedBroadcastMessage(name, x, y));
         }
-        //Dumper.dump(userDisjoined);
+        if (DEBUG_WITH_DUMPING)
+            Dumper.dump(userDisjoined);
         onlineUsers.remove(sessionId);
     }
 
@@ -425,10 +442,18 @@ public class GameServer {
         String name = data.getUserName();
         Player newOnlineUser = null;
 
+
+        /*Iterator <SocketIOClient> itBySockets = server.getAllClients().iterator();
+        while (itBySockets.hasNext()) {
+            SocketIOClient socket = itBySockets.next();
+            if (sessionId != socket.getSessionId())
+                socket.sendEvent("user_joined", new UserJoinedBroadcastMessage(name, newOnlineUser.getX(), newOnlineUser.getY()));
+        }*/
+
+
         try {
             PreparedStatement preStatementDB;
             ResultSet resultSetDB;
-
             preStatementDB = connectionToDB.prepareStatement("SELECT * FROM Users WHERE userName = ?;");
             preStatementDB.setString(1, name);
             resultSetDB = preStatementDB.executeQuery();
@@ -473,7 +498,6 @@ public class GameServer {
                 newOnlineUser.setInventory(invdb);
             }
             onlineUsers.put(sessionId, newOnlineUser);
-
         } catch (Exception e) {
             client.sendEvent("start", new StartMessage(false));
             e.printStackTrace();
@@ -484,7 +508,8 @@ public class GameServer {
         Iterator <SocketIOClient> itBySockets = server.getAllClients().iterator();
         while (itBySockets.hasNext()) {
             SocketIOClient socket = itBySockets.next();
-            socket.sendEvent("user_joined", new UserJoinedBroadcastMessage(name, newOnlineUser.getX(), newOnlineUser.getY()));
+            if (sessionId != socket.getSessionId())
+                socket.sendEvent("user_joined", new UserJoinedBroadcastMessage(name, newOnlineUser.getX(), newOnlineUser.getY()));
         }
     }
 
@@ -573,7 +598,6 @@ public class GameServer {
             client.sendEvent("dig_response", new DigResponseMessage(0, "", 0, 0, 0, state.getEnergy()));
     }
 
-
     //Vote
     private static void voteInformation(SocketIOClient client, VotesInformationRequestMessage data, AckRequest ackRequest) {
         Player state = onlineUsers.get(client.getSessionId());
@@ -624,5 +648,29 @@ public class GameServer {
     public static void getInventory(SocketIOClient client, GetInventoryMessage data, AckRequest ackRequest) {
         Player state = onlineUsers.get(client.getSessionId());
         client.sendEvent("inventory", new InventoryMessage(state.getInventory()));
+    }
+
+    //Tree
+    public static void getTree(SocketIOClient client, GetTreeMessage data, AckRequest ackRequest) {
+        try {
+
+            PreparedStatement preStatementDB;
+            ResultSet resultSetDB;
+            preStatementDB = connectionToDB.prepareStatement("SELECT * FROM Tree;");
+            resultSetDB = preStatementDB.executeQuery();
+            Tree tree = new Tree(SQLExtension.size(resultSetDB));
+            while (resultSetDB.next()) {
+                int nodeId = resultSetDB.getInt("nodeId");
+                int parent = resultSetDB.getInt("parentId");
+                String name = resultSetDB.getString("name");
+                int progress = resultSetDB.getInt("progress");
+                tree.addEdge(parent, nodeId, name, progress);
+            }
+            //client.sendEvent("tree", new TreeMessage(tree.getNodeOnPlane()));
+        } catch (SQLException e) {
+            System.err.println("getTree exception!");
+            e.printStackTrace();
+            System.exit(0);
+        }
     }
 }
