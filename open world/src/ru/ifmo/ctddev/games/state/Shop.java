@@ -32,6 +32,7 @@ public class Shop {
                 items.put(id, new Item(id, name, type, costBuy, costSell));
             }
             resultSet.close();
+            preStatementDB.close();
         } catch (Exception e) {
             System.err.println("loadAvailableItems exception!");
             e.printStackTrace();
@@ -66,6 +67,6 @@ public class Shop {
             return false;
         state.addItems(cur, -count);
         state.addMoney(count * cur.getCostSell());
-        return false;
+        return true;
     }
 }

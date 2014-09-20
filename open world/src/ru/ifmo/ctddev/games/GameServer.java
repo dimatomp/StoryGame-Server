@@ -26,18 +26,19 @@ public class GameServer {
     static String USER;
     static String PASSWORD;
     static Connection connectionToDB;
-    static int PERIOD_OF_DUMPING_IN_DATABASE = 60000;
 
     final static boolean DEBUG_WITH_DUMPING = true;
 
     static class Dumper {//TODO write update inventory
+        static int PERIOD_OF_DUMPING = 60000;
         private static Connection connection;
         private static Timer timer;
+
         public static void setConnection(Connection con) {
             connection = con;
         }
 
-        public static void start(int period) {
+        public static void start() {
             timer = new Timer();
             timer.schedule(new TimerTask() {
                 @Override
@@ -83,7 +84,7 @@ public class GameServer {
                         System.exit(0);
                     }
                 }
-            }, period, period);
+            }, PERIOD_OF_DUMPING, PERIOD_OF_DUMPING);
         }
 
         public static void dump(Player state) {
@@ -139,6 +140,24 @@ public class GameServer {
                 e.printStackTrace();
                 System.exit(0);
             }
+        }
+    }
+
+    static class AsyncEvents {
+        private static Timer timerEnergy;
+        private static final int PERIOD_OF_ADD_ENERGY = 30000;
+        private static final int ADD_ENERGY = 6;
+
+        public static void start() {
+            timerEnergy = new Timer();
+            timerEnergy.schedule(new TimerTask() {
+                @Override
+                public void run() {
+                    server.getBroadcastOperations().sendEvent("add_energy", new AddEnergyMessage(ADD_ENERGY));
+                    for (Map.Entry <UUID, Player> e : onlineUsers.entrySet())
+                        e.getValue().addEnergy(ADD_ENERGY);
+                }
+            }, PERIOD_OF_ADD_ENERGY, PERIOD_OF_ADD_ENERGY);
         }
     }
 
@@ -220,7 +239,6 @@ public class GameServer {
         if (DEBUG_WITH_DUMPING) {
             try {
                 Dumper.setConnection(DriverManager.getConnection("jdbc:mysql://localhost/" + NAME_OF_DB, USER, PASSWORD));
-                Dumper.start(PERIOD_OF_DUMPING_IN_DATABASE);
             } catch (Exception e) {
                 System.err.println("Initializate Dumper exception!");
                 e.printStackTrace();
@@ -228,8 +246,10 @@ public class GameServer {
             }
         }
 
+        //AsyncEvents.start();//SEND_OF_ENERGY
+
         server.start();
-        Thread.sleep(30000);
+        //Thread.sleep(30000);
         //newVote("This poll works random " + helpfulRandom.nextInt(), new String[] {"Yes", "No"}, new int[] {10, 12});
         //System.err.println("New vote was sent!");
 
@@ -418,7 +438,6 @@ public class GameServer {
     }
 
     private static void disconnectedUser(SocketIOClient socketIOClient) {//TODO WRITE CORRECT DISCONNECTED
-        System.err.println("The client has disconnected");
         UUID sessionId = socketIOClient.getSessionId();
         Player userDisjoined = onlineUsers.get(sessionId);
         String name = userDisjoined.getUserName();
@@ -433,6 +452,7 @@ public class GameServer {
         if (DEBUG_WITH_DUMPING)
             Dumper.dump(userDisjoined);
         onlineUsers.remove(sessionId);
+        System.err.println("The client has disconnected");
     }
 
     //API methods
@@ -442,14 +462,25 @@ public class GameServer {
         String name = data.getUserName();
         Player newOnlineUser = null;
 
+        //already connected
+        boolean hasConnected = false;
+        UUID prevSessionId = null;
+        for (Map.Entry <UUID, Player> e : onlineUsers.entrySet())
+            if (e.getValue().getUserName().equals(data.getUserName())) {
+                newOnlineUser = e.getValue();
+                hasConnected = true;
+                prevSessionId = e.getKey();
+                break;
+            }
 
-        /*Iterator <SocketIOClient> itBySockets = server.getAllClients().iterator();
-        while (itBySockets.hasNext()) {
-            SocketIOClient socket = itBySockets.next();
-            if (sessionId != socket.getSessionId())
-                socket.sendEvent("user_joined", new UserJoinedBroadcastMessage(name, newOnlineUser.getX(), newOnlineUser.getY()));
-        }*/
-
+        if (hasConnected) {
+            server.getClient(sessionId).disconnect();
+            onlineUsers.remove(prevSessionId);
+            onlineUsers.put(sessionId, newOnlineUser);
+            client.sendEvent("start", new StartMessage(true, map.getVision(newOnlineUser)));
+            return;
+        }
+        //finish already connected
 
         try {
             PreparedStatement preStatementDB;
@@ -546,18 +577,23 @@ public class GameServer {
         client.sendEvent("map", new MapMessage(map.getField()));
     }
 
+    private static boolean occurredProbably(int percent) {
+        return Math.abs(helpfulRandom.nextInt()) % 100 < percent;
+    }
     private static void dig(SocketIOClient client, DigMessage data, AckRequest ackRequest) {//TODO write dig
         final int PROBABLY_DIG = 50;
-        final int ENERGY_GRASS = 10;
-        final int ENERGY_DESERT = 7;
+        final int PROBABLY_EXTRA_ITEM = 50;
+        final int ENERGY_GRASS = 8;
+        final int ENERGY_DESERT = 5;
         final double ADD_PROBABLY = 0.2;
         final int ADD_COUNT = 1;
+        final int MAX_COUNT_FIND = 3;
 
         Player state = onlineUsers.get(client.getSessionId());
         int x = state.getX();
         int y = state.getY();
         int energy = (map.getValue(x, y) == MapState.Field.GRASS ? ENERGY_GRASS : ENERGY_DESERT);
-        if ((x != map.getShopX() || y != map.getShopY()) && Math.abs(helpfulRandom.nextInt()) % 100 < PROBABLY_DIG && state.getEnergy() >= energy) {
+        if ((x != map.getShopX() || y != map.getShopY()) &&  occurredProbably(PROBABLY_DIG) && state.getEnergy() >= energy) {
             Map <Integer, Item> items = shop.getAvailableItems();
             Item[] srt = new Item[items.size()];
             int it = 0;
@@ -579,7 +615,7 @@ public class GameServer {
 
             Item found = null;
             double probably = Math.min(helpfulRandom.nextDouble() +
-                    (map.getValue(x, y) == MapState.Field.GRASS ? ADD_PROBABLY : 0), 1);
+                    (map.getValue(x, y) == MapState.Field.GRASS && occurredProbably(PROBABLY_EXTRA_ITEM)? ADD_PROBABLY : 0), 1);
             double sum = 0;
             for (int i = 0; i < srt.length; ++i) {
                 sum += (1.0 / srt[i].getCostBuy()) / totalSum;
@@ -588,14 +624,16 @@ public class GameServer {
                     break;
                 }
             }
-            int count = Math.abs(helpfulRandom.nextInt()) % 4 + 1;
+            int count = Math.abs(helpfulRandom.nextInt()) % MAX_COUNT_FIND + 1;
             count += (map.getValue(x, y) == MapState.Field.GRASS ? ADD_COUNT : 0);
-            state.setEnergy(state.getEnergy() - energy);
+            state.addEnergy(-energy);
             state.addItems(new InventoryItem(found), count);
             client.sendEvent("dig_response", new DigResponseMessage(found.getId(), found.getName(), found.getCostSell(),
                     count, found.getType(), state.getEnergy()));
-        } else
+        } else {
+            state.addEnergy(-energy);
             client.sendEvent("dig_response", new DigResponseMessage(0, "", 0, 0, 0, state.getEnergy()));
+        }
     }
 
     //Vote
@@ -650,7 +688,7 @@ public class GameServer {
         client.sendEvent("inventory", new InventoryMessage(state.getInventory()));
     }
 
-    //Tree
+    //Tree TODO uncomment
     public static void getTree(SocketIOClient client, GetTreeMessage data, AckRequest ackRequest) {
         try {
 

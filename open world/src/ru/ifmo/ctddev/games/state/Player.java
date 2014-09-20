@@ -76,6 +76,10 @@ public class Player {
         money += add;
     }
 
+    public void addEnergy(int add) {
+        energy += add;
+    }
+
     public int getLastActionTime() {
         return lastActionTime;
     }
