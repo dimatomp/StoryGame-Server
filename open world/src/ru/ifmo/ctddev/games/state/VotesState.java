@@ -151,11 +151,14 @@ public class VotesState {
         NO, ALREADY, OTHER
     }
 
+    public static Poll getPollById(int pollId) {
+        if (activePolls.containsKey(pollId))
+            return activePolls.get(pollId);
+        return null;
+    }
+
     public static boolean vote(Player state, int pollId, String optionName, int amount) {//TODO
-        Poll poll = null;
-        for (Map.Entry <Integer, Poll> e : activePolls.entrySet())
-            if (e.getValue().getId() == pollId)
-                poll = e.getValue();
+        Poll poll = getPollById(pollId);
 
         if (poll == null || !poll.containsOption(optionName))
             return false;

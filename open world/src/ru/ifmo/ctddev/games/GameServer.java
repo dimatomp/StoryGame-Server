@@ -29,8 +29,8 @@ public class GameServer {
 
     final static boolean DEBUG_WITH_DUMPING = true;
 
-    static class Dumper {//TODO write update inventory
-        static int PERIOD_OF_DUMPING = 60000;
+    static class Dumper {
+        private static int PERIOD_OF_DUMPING = 60000;
         private static Connection connection;
         private static Timer timer;
 
@@ -43,7 +43,7 @@ public class GameServer {
             timer.schedule(new TimerTask() {
                 @Override
                 public void run() {
-                    System.err.println("IN Dumper.run");
+                    System.err.println("Dumper.run");
                     if (onlineUsers.size() == 0)
                         return;
                     String queryUsers = "INSERT INTO Users (userId, userName, energy, money, x, y, lastActionTime) VALUES ";
@@ -239,6 +239,7 @@ public class GameServer {
         if (DEBUG_WITH_DUMPING) {
             try {
                 Dumper.setConnection(DriverManager.getConnection("jdbc:mysql://localhost/" + NAME_OF_DB, USER, PASSWORD));
+                Dumper.start();
             } catch (Exception e) {
                 System.err.println("Initializate Dumper exception!");
                 e.printStackTrace();
@@ -437,7 +438,7 @@ public class GameServer {
         });
     }
 
-    private static void disconnectedUser(SocketIOClient socketIOClient) {//TODO WRITE CORRECT DISCONNECTED
+    private static void disconnectedUser(SocketIOClient socketIOClient) {
         UUID sessionId = socketIOClient.getSessionId();
         Player userDisjoined = onlineUsers.get(sessionId);
         String name = userDisjoined.getUserName();
@@ -452,7 +453,7 @@ public class GameServer {
         if (DEBUG_WITH_DUMPING)
             Dumper.dump(userDisjoined);
         onlineUsers.remove(sessionId);
-        System.err.println("The client has disconnected");
+        System.err.println("The client has disconnected " + name);
     }
 
     //API methods
@@ -474,7 +475,7 @@ public class GameServer {
             }
 
         if (hasConnected) {
-            server.getClient(sessionId).disconnect();
+            server.getClient(prevSessionId).disconnect();
             onlineUsers.remove(prevSessionId);
             onlineUsers.put(sessionId, newOnlineUser);
             client.sendEvent("start", new StartMessage(true, map.getVision(newOnlineUser)));
@@ -550,17 +551,15 @@ public class GameServer {
         UUID sessionId = client.getSessionId();
         Player state = onlineUsers.get(client.getSessionId());
         MoveResponseMessage moveResponseMessage;
-        if (map.canMove(state.getX(), state.getY(), dx, dy)) {
+        if (map.canMove(state.getX(), state.getY(), dx, dy) && Math.abs(dx) + Math.abs(dy) == 1) {
             moveResponseMessage = new MoveResponseMessage(true, map.getNextLayer(state, dx, dy), dx, dy);
             client.sendEvent("move_response", moveResponseMessage);
-
             Iterator <SocketIOClient> itBySockets = server.getAllClients().iterator();
             while (itBySockets.hasNext()) {
                 SocketIOClient socket = itBySockets.next();
                 if (socket.getSessionId() != sessionId)
                     socket.sendEvent("move", new MoveBroadcastMessage(state.getUserName(), state.getX(), state.getY(), dx, dy));
             }
-
             state.move(dx, dy);
         } else {
             moveResponseMessage = new MoveResponseMessage(false);
@@ -578,8 +577,9 @@ public class GameServer {
     }
 
     private static boolean occurredProbably(int percent) {
-        return Math.abs(helpfulRandom.nextInt()) % 100 < percent;
+        return helpfulRandom.nextInt(100) < percent;
     }
+
     private static void dig(SocketIOClient client, DigMessage data, AckRequest ackRequest) {//TODO write dig
         final int PROBABLY_DIG = 50;
         final int PROBABLY_EXTRA_ITEM = 50;
@@ -643,11 +643,50 @@ public class GameServer {
                 VotesState.getUserVotes(state)));
     }
 
+    static double getProgress(double s, double ai, int x) {
+        if (x == 0)
+            return 0;
+        double l = ai * Math.log(s) - s * Math.log(s);
+        if (ai < 0.0001)
+            l = 0;
+        double r = ai * Math.log(s + x) + x - s * Math.log(s + x);
+        return r - l;
+    }
+
     private static void vote(SocketIOClient client, VoteMessage data, AckRequest ackRequest) {
         System.err.println("new vote from user");
         Player state = onlineUsers.get(client.getSessionId());
         boolean result = VotesState.vote(state, data.getId(), data.getOption(), data.getAmount());
         client.sendEvent("vote_response", new VoteResponseMessage(result));
+
+        final int THRESHOLD = 1000;
+        if (result) {
+            int amount = data.getAmount(), s = 0, ai = 0;
+            Poll poll = VotesState.getPollById(data.getId());
+            int[] invMoney = poll.getInvestedMoney();
+            String[] optName = poll.getOptionsName();
+            for (int i = 0; i < invMoney.length; ++i) {
+                s += invMoney[i];
+                if (optName[i].equals(data.getOption()))
+                    ai = invMoney[i];
+            }
+            double addProgress = getProgress(s, ai, amount);
+            Tree tree = extractTree();
+            int level = tree.getLevelByName(data.getOption());
+            addProgress *= 1.0 * level / THRESHOLD;
+            try {
+                PreparedStatement preStatementDB;
+                preStatementDB = connectionToDB.prepareStatement("UPDATE Tree SET progress = progress + ? WHERE name = ?;");
+                preStatementDB.setDouble(1, addProgress);
+                preStatementDB.setString(2, data.getOption());
+                preStatementDB.executeUpdate();
+                preStatementDB.close();
+            } catch (SQLException e) {
+                System.err.println("Exception when update tree vote!");
+                e.printStackTrace();
+                System.exit(0);
+            }
+        }
     }
 
     private static void newVote(String question, String[] optionsName, int[] minimalAmount) {
@@ -689,9 +728,8 @@ public class GameServer {
     }
 
     //Tree TODO uncomment
-    public static void getTree(SocketIOClient client, GetTreeMessage data, AckRequest ackRequest) {
+    public static Tree extractTree() {
         try {
-
             PreparedStatement preStatementDB;
             ResultSet resultSetDB;
             preStatementDB = connectionToDB.prepareStatement("SELECT * FROM Tree;");
@@ -704,11 +742,18 @@ public class GameServer {
                 int progress = resultSetDB.getInt("progress");
                 tree.addEdge(parent, nodeId, name, progress);
             }
-            //client.sendEvent("tree", new TreeMessage(tree.getNodeOnPlane()));
+            preStatementDB.close();
+            return tree;
         } catch (SQLException e) {
-            System.err.println("getTree exception!");
+            System.err.println("extractTree load");
             e.printStackTrace();
             System.exit(0);
         }
+        return null;
+    }
+
+    public static void getTree(SocketIOClient client, GetTreeMessage data, AckRequest ackRequest) {
+        Tree tree = extractTree();
+        client.sendEvent("tree", new TreeMessage(tree.getNodeOnPlane()));
     }
 }

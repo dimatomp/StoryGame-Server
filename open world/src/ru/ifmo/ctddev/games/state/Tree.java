@@ -12,7 +12,7 @@ public class Tree {
     private ArrayList <ArrayList <Integer> > g;
     private ArrayList <String> name;
     private ArrayList <Integer> progress;
-    private Map <Integer, Node> nodes = new HashMap<Integer, Node>();
+    private ArrayList<Node> nodes = new ArrayList<Node>();
     private int root;
     private int[] level;
     private final int LENGTH_OF_EDGE = 80;
@@ -29,6 +29,18 @@ public class Tree {
             progress.add(0);
         }
         level = new int[n];
+    }
+
+    private boolean levelCached = false;
+    public int getLevelByName(String n) {
+        if (!levelCached) {
+            level[root] = 1;
+            calcLevels(root);
+        }
+        for (int i = 0; i < name.size(); ++i)
+            if (name.get(i).equals(n))
+                return level[i];
+        return -1;
     }
 
     private int getIdVertex(int v) {
@@ -77,11 +89,13 @@ public class Tree {
         return ret;
     }
 
-    public Map <Integer, Node> getNodeOnPlane() {
-        level[root] = 1;
-        calcLevels(root);
+    public Node[] getNodeOnPlane() {
+        if (levelCached) {
+            level[root] = 1;
+            calcLevels(root);
+        }
         int sizeRoot = g.get(root).size();
-        nodes.put(idToVertex.get(root), new Node(idToVertex.get(root), 0, name.get(root), progress.get(root), 0, 0));
+        nodes.add(new Node(idToVertex.get(root), 0, name.get(root), progress.get(root), 0, 0));
         double startAngle =  -180.0 / sizeRoot;
         //double angle = 360.0 / sizeRoot;
         //System.err.println("ss " + startAngle + " " + angle);
@@ -92,7 +106,10 @@ public class Tree {
             dfs(start, root, startAngle, angle, LENGTH_OF_EDGE);
             startAngle += angle;
         }
-        return nodes;
+        Node[] ret = new Node[nodes.size()];
+        for (int i = 0; i < nodes.size(); ++i)
+            ret[i] = nodes.get(i);
+        return ret;
     }
 
     private void calcLevels(int v) {
@@ -107,7 +124,7 @@ public class Tree {
         double res = startAngle + angle * 0.5;
         int x = (int)(curRadius * Math.cos(res / 180 * Math.PI));
         int y = (int)(curRadius * Math.sin(res / 180 * Math.PI));
-        nodes.put(idToVertex.get(v), new Node(idToVertex.get(v), idToVertex.get(p), name.get(v), progress.get(v), x, y));
+        nodes.add(new Node(idToVertex.get(v), idToVertex.get(p), name.get(v), progress.get(v), x, y));
         //double nextAngle = angle / g.get(v).size();
 
         double[] part = getPartition(v, angle);
