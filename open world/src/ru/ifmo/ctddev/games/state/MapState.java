@@ -31,25 +31,18 @@ public class MapState {
                 map[i][j] = rnd.nextBoolean() ? Field.GRASS : Field.DESERT;
             }
         }*/
-        //dfs(0, 0);
+
+        dfs(0, 0);
         for (int i = 0; i < N; ++i)
             for (int j = 0; j < M; ++j)
                 if (!use[i][j])
                     map[i][j] = Field.GRASS;
-        int sum = 0;
+        /*int sum = 0;
         while (sum < PERCENT_OF_GRASS * N * M) {
-            int num = rnd.nextInt(N + M - 1);
             int i = rnd.nextInt(N);
             int j = rnd.nextInt(M);
-            /*if (num < M) {
-                i = 0;
-                j = num;
-            } else {
-                i = num - M + 1;
-                j = 0;
-            }*/
 
-            while (i + 1 < N && j + 1 < M) {
+            while (i < N && j < M) {
                 if (map[i][j] == Field.GRASS) ++sum;
                 map[i][j] = Field.DESERT;
                 int nextDraw = rnd.nextInt(100);
@@ -59,7 +52,7 @@ public class MapState {
                 if (j == M - 1 || go && i + 1 < N) ++i;
                 else ++j;
             }
-        }
+        }*/
 
         System.err.println("build field");
         int x = rnd.nextInt(N);
@@ -80,6 +73,18 @@ public class MapState {
     private final int[] dx = new int[]{-1, 0, 1, 0};
     private final int[] dy = new int[]{0, -1, 0, 1};
     private int cntDesert = 0;
+
+    private int countNeig(int nx, int ny) {
+        int ret = 0;
+        for (int i = 0; i < 4; ++i) {
+            int cx = nx + dx[i];
+            int cy = ny + dy[i];
+            if (cx >= 0 && cx < N && cy >= 0 && cy < M)
+                if (use[cx][cy]) ++ret;
+        }
+        return ret;
+    }
+
     private void dfs(int x, int y) {
         if (cntDesert >= N * M / 2)
             return;
@@ -90,7 +95,7 @@ public class MapState {
             int j = Math.abs(rnd.nextInt()) % 4;
             int nx = x + dx[j];
             int ny = y + dy[j];
-            if (nx >= 0 & nx < N && ny >= 0 && ny < M && !use[nx][ny])
+            if (nx >= 0 & nx < N && ny >= 0 && ny < M && !use[nx][ny] && countNeig(nx, ny) == 1)
                 dfs(nx, ny);
         }
     }

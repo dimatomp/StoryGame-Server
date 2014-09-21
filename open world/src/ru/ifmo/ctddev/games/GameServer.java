@@ -29,10 +29,14 @@ public class GameServer {
 
     final static boolean DEBUG_WITH_DUMPING = true;
 
-    static class Dumper {
+    static class AsyncEvents {
         private static int PERIOD_OF_DUMPING = 60000;
         private static Connection connection;
         private static Timer timer;
+
+        private static Timer timerEnergy;
+        private static final int PERIOD_OF_ADD_ENERGY = 23000;
+        private static final int ADD_ENERGY = 6;
 
         public static void setConnection(Connection con) {
             connection = con;
@@ -85,6 +89,16 @@ public class GameServer {
                     }
                 }
             }, PERIOD_OF_DUMPING, PERIOD_OF_DUMPING);
+
+            timerEnergy = new Timer();
+            timerEnergy.schedule(new TimerTask() {
+                @Override
+                public void run() {
+                    server.getBroadcastOperations().sendEvent("add_energy", new AddEnergyMessage(ADD_ENERGY));
+                    for (Map.Entry <UUID, Player> e : onlineUsers.entrySet())
+                        e.getValue().addEnergy(ADD_ENERGY);
+                }
+            }, PERIOD_OF_ADD_ENERGY, PERIOD_OF_ADD_ENERGY);
         }
 
         public static void dump(Player state) {
@@ -140,24 +154,6 @@ public class GameServer {
                 e.printStackTrace();
                 System.exit(0);
             }
-        }
-    }
-
-    static class AsyncEvents {
-        private static Timer timerEnergy;
-        private static final int PERIOD_OF_ADD_ENERGY = 30000;
-        private static final int ADD_ENERGY = 6;
-
-        public static void start() {
-            timerEnergy = new Timer();
-            timerEnergy.schedule(new TimerTask() {
-                @Override
-                public void run() {
-                    server.getBroadcastOperations().sendEvent("add_energy", new AddEnergyMessage(ADD_ENERGY));
-                    for (Map.Entry <UUID, Player> e : onlineUsers.entrySet())
-                        e.getValue().addEnergy(ADD_ENERGY);
-                }
-            }, PERIOD_OF_ADD_ENERGY, PERIOD_OF_ADD_ENERGY);
         }
     }
 
@@ -238,16 +234,14 @@ public class GameServer {
 
         if (DEBUG_WITH_DUMPING) {
             try {
-                Dumper.setConnection(DriverManager.getConnection("jdbc:mysql://localhost/" + NAME_OF_DB, USER, PASSWORD));
-                Dumper.start();
+                AsyncEvents.setConnection(DriverManager.getConnection("jdbc:mysql://localhost/" + NAME_OF_DB, USER, PASSWORD));
+                AsyncEvents.start();
             } catch (Exception e) {
                 System.err.println("Initializate Dumper exception!");
                 e.printStackTrace();
                 System.exit(0);
             }
         }
-
-        //AsyncEvents.start();//SEND_OF_ENERGY
 
         server.start();
         //Thread.sleep(30000);
@@ -436,6 +430,17 @@ public class GameServer {
                 getTree(client, data, ackRequest);
             }
         });
+
+        /*
+            *->throw_out {name:string, count:int}
+            *->throw_out_response {success:boolean}
+        */
+        server.addEventListener("throw_out", ThrowOutMessage.class, new DataListener<ThrowOutMessage>() {
+            @Override
+            public void onData(SocketIOClient client, ThrowOutMessage data, AckRequest ackRequest) throws Exception {
+                throwOut(client, data, ackRequest);
+            }
+        });
     }
 
     private static void disconnectedUser(SocketIOClient socketIOClient) {
@@ -451,7 +456,7 @@ public class GameServer {
                 socket.sendEvent("user_disjoined", new UserDisjoinedBroadcastMessage(name, x, y));
         }
         if (DEBUG_WITH_DUMPING)
-            Dumper.dump(userDisjoined);
+            AsyncEvents.dump(userDisjoined);//TODO this must acync
         onlineUsers.remove(sessionId);
         System.err.println("The client has disconnected " + name);
     }
@@ -581,7 +586,7 @@ public class GameServer {
     }
 
     private static void dig(SocketIOClient client, DigMessage data, AckRequest ackRequest) {//TODO write dig
-        final int PROBABLY_DIG = 50;
+        final int PROBABLY_LUCKY = 70;
         final int PROBABLY_EXTRA_ITEM = 50;
         final int ENERGY_GRASS = 8;
         final int ENERGY_DESERT = 5;
@@ -593,7 +598,12 @@ public class GameServer {
         int x = state.getX();
         int y = state.getY();
         int energy = (map.getValue(x, y) == MapState.Field.GRASS ? ENERGY_GRASS : ENERGY_DESERT);
-        if ((x != map.getShopX() || y != map.getShopY()) &&  occurredProbably(PROBABLY_DIG) && state.getEnergy() >= energy) {
+        if (x == map.getShopX() && y == map.getShopY() || state.getEnergy() < energy) {
+            client.sendEvent("dig_response", new DigResponseMessage(0, "", 0, 0, 0, state.getEnergy()));
+            return;
+        }
+
+        if (occurredProbably(PROBABLY_LUCKY)) {
             Map <Integer, Item> items = shop.getAvailableItems();
             Item[] srt = new Item[items.size()];
             int it = 0;
@@ -728,7 +738,25 @@ public class GameServer {
         client.sendEvent("inventory", new InventoryMessage(state.getInventory()));
     }
 
-    //Tree TODO uncomment
+    public static void throwOut(SocketIOClient client, ThrowOutMessage data, AckRequest ackRequest) {
+        Player player = onlineUsers.get(client.getSessionId());
+        Map <Integer, InventoryItem> inv = player.getInventory();
+        InventoryItem item = null;
+        for (Map.Entry <Integer, InventoryItem> e : inv.entrySet())
+            if (e.getValue().getName().equals(data.getName()))
+                item = e.getValue();
+        if (item == null)
+            client.sendEvent("throw_out_response", new ThrowOutResponseMessage(false));
+        else {
+            if (item.getCount() < data.getCount())
+                client.sendEvent("throw_out_response", new ThrowOutResponseMessage(false));
+            else {
+                player.addItems(item, -data.getCount());
+                client.sendEvent("throw_out_response", new ThrowOutResponseMessage(true));
+            }
+        }
+    }
+    //Tree
     public static Tree extractTree() {
         try {
             PreparedStatement preStatementDB;
