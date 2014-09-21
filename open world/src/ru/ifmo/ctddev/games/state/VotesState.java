@@ -1,5 +1,6 @@
 package ru.ifmo.ctddev.games.state;
 
+import ru.ifmo.ctddev.games.Logger;
 import ru.ifmo.ctddev.games.messages.UserVoteMessage;
 
 import java.sql.Connection;
@@ -48,7 +49,7 @@ public class VotesState {
             }
             resultSetDB.close();
         } catch (SQLException e) {
-            System.err.println("loadActivePolls exception!");
+            Logger.log("loadActivePolls exception!");
             e.printStackTrace();
             System.exit(0);
         }
@@ -92,7 +93,7 @@ public class VotesState {
             preStatementDB.close();
             return ret;
         } catch (SQLException e) {
-            System.err.println("addActivePoll exception!");
+            Logger.log("addActivePoll exception!");
             e.printStackTrace();
             System.exit(0);
         }
@@ -108,7 +109,7 @@ public class VotesState {
             preStatementDB.executeUpdate();
             activePolls.remove(idDel);
         } catch (SQLException e) {
-            System.err.println("closePoll exception!");
+            Logger.log("closePoll exception!");
             e.printStackTrace();
             System.exit(0);
         }
@@ -132,7 +133,7 @@ public class VotesState {
             }
             return ret;
         } catch (SQLException e) {
-            System.err.println("getUserVotes exception!");
+            Logger.log("getUserVotes exception!");
             e.printStackTrace();
             System.exit(0);
         }
@@ -224,7 +225,7 @@ public class VotesState {
                 preStatementDB.close();
                 return Vote.NO;
             }
-            System.err.println("next prevVotes");
+            Logger.log("next prevVotes");
             prevVotes.next();
             boolean diffVote = prevVotes.getInt("optionId") != optionId;
             preStatementDB.close();
@@ -235,7 +236,7 @@ public class VotesState {
                 return Vote.OTHER;
             return Vote.ALREADY;
         } catch (SQLException e) {
-            System.err.println("canVote exception!");
+            Logger.log("canVote exception!");
             e.printStackTrace();
             System.exit(0);
         }

@@ -1,5 +1,7 @@
 package ru.ifmo.ctddev.games.state;
 
+import ru.ifmo.ctddev.games.Logger;
+
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -34,7 +36,7 @@ public class Shop {
             resultSet.close();
             preStatementDB.close();
         } catch (Exception e) {
-            System.err.println("loadAvailableItems exception!");
+            Logger.log("loadAvailableItems exception!");
             e.printStackTrace();
             System.exit(0);
         }

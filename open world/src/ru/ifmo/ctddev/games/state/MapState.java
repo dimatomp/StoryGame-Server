@@ -1,12 +1,14 @@
 package ru.ifmo.ctddev.games.state;
 
-import java.util.Collections;
+import ru.ifmo.ctddev.games.Logger;
+
 import java.util.Random;
 
 
-/**8
+/**
  * Created by Aksenov239 on 30.08.2014.
  */
+
 public class MapState {
     public enum Field {
         GRASS, DESERT, MOUNTAIN, SHOP, WATER
@@ -26,35 +28,13 @@ public class MapState {
     public MapState() {
         map = new Field[N][M];
         use = new boolean[N][M];
-        /*for (int i = 0; i < map.length; i++) {
-            for (int j = 0; j < map[i].length; j++) {
-                map[i][j] = rnd.nextBoolean() ? Field.GRASS : Field.DESERT;
-            }
-        }*/
-
         dfs(0, 0);
         for (int i = 0; i < N; ++i)
             for (int j = 0; j < M; ++j)
                 if (!use[i][j])
                     map[i][j] = Field.GRASS;
-        /*int sum = 0;
-        while (sum < PERCENT_OF_GRASS * N * M) {
-            int i = rnd.nextInt(N);
-            int j = rnd.nextInt(M);
 
-            while (i < N && j < M) {
-                if (map[i][j] == Field.GRASS) ++sum;
-                map[i][j] = Field.DESERT;
-                int nextDraw = rnd.nextInt(100);
-                if (nextDraw < 5)
-                    break;
-                boolean go = rnd.nextBoolean();
-                if (j == M - 1 || go && i + 1 < N) ++i;
-                else ++j;
-            }
-        }*/
-
-        System.err.println("build field");
+        Logger.log("build field");
         int x = rnd.nextInt(N);
         int y = rnd.nextInt(M);
         while (x == defaultX && y == defaultY) {

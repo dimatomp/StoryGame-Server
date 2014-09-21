@@ -97,8 +97,6 @@ public class Tree {
         int sizeRoot = g.get(root).size();
         nodes.add(new Node(idToVertex.get(root), 0, name.get(root), progress.get(root), 0, 0));
         double startAngle =  -180.0 / sizeRoot;
-        //double angle = 360.0 / sizeRoot;
-        //System.err.println("ss " + startAngle + " " + angle);
         double[] part = getPartition(root, 360.0);
         for (int i = 0; i < sizeRoot; ++i) {
             int start = g.get(root).get(i);

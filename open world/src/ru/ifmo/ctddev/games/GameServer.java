@@ -47,7 +47,7 @@ public class GameServer {
             timer.schedule(new TimerTask() {
                 @Override
                 public void run() {
-                    System.err.println("Dumper.run");
+                    Logger.log("Dumper.run");
                     if (onlineUsers.size() == 0)
                         return;
                     String queryUsers = "INSERT INTO Users (userId, userName, energy, money, x, y, lastActionTime) VALUES ";
@@ -83,7 +83,7 @@ public class GameServer {
                             dumpInventory(player);
                         }
                     } catch (SQLException e) {
-                        System.err.println("Dumper exception!");
+                        Logger.log("Dumper exception!");
                         e.printStackTrace();
                         System.exit(0);
                     }
@@ -103,7 +103,7 @@ public class GameServer {
 
         public static void dump(Player state) {
             try {
-                System.err.println("dump player");
+                Logger.log("dump player");
                 PreparedStatement statement = connectionToDB.prepareStatement("UPDATE Users SET energy=?, money=?, x=?, y=?, " +
                         "lastActionTime=? WHERE userId=?;");
                 statement.setInt(1, state.getEnergy());
@@ -116,7 +116,7 @@ public class GameServer {
                 statement.close();
                 dumpInventory(state);
             } catch (Exception e) {
-                System.err.println("Dumping exception");
+                Logger.log("Dumping exception");
                 e.printStackTrace();
                 System.exit(0);
             }
@@ -150,7 +150,7 @@ public class GameServer {
                     st.close();
                 }
             } catch (SQLException e) {
-                System.err.println("Execute in dumpInventory!");
+                Logger.log("Execute in dumpInventory!");
                 e.printStackTrace();
                 System.exit(0);
             }
@@ -175,14 +175,6 @@ public class GameServer {
     }
 
     public static void main(String[] args) throws InterruptedException {
-        try {
-            System.in.close();
-            System.out.close();
-        } catch (IOException e) {
-            System.err.println("Failed to daemonize myself.");
-            System.exit(0);
-        }
-
         ///Database initializate
         if (args.length != 5) {
             System.err.println("You don't input information!");
@@ -229,7 +221,6 @@ public class GameServer {
 
         server = new SocketIOServer(config);
 
-        System.err.println("The server has started!");
         addListeners();
 
         if (DEBUG_WITH_DUMPING) {
@@ -237,20 +228,14 @@ public class GameServer {
                 AsyncEvents.setConnection(DriverManager.getConnection("jdbc:mysql://localhost/" + NAME_OF_DB, USER, PASSWORD));
                 AsyncEvents.start();
             } catch (Exception e) {
-                System.err.println("Initializate Dumper exception!");
+                Logger.log("Initializate Dumper exception!");
                 e.printStackTrace();
                 System.exit(0);
             }
         }
 
         server.start();
-        //Thread.sleep(30000);
-        //newVote("This poll works random " + helpfulRandom.nextInt(), new String[] {"Yes", "No"}, new int[] {10, 12});
-        //System.err.println("New vote was sent!");
-
-        //Thread.sleep(Integer.MAX_VALUE);
-
-        //server.stop();
+        System.err.println("The server has started! All information write in log");
     }
 
     //Methods for work
@@ -277,7 +262,7 @@ public class GameServer {
             }
             return inventory;
         } catch (SQLException e) {
-            System.err.println("Exception in loadInventoryFromDatabase!");
+            Logger.log("Exception in loadInventoryFromDatabase!");
             e.printStackTrace();
             System.exit(0);
         }
@@ -290,7 +275,7 @@ public class GameServer {
         server.addConnectListener(new ConnectListener() {
             @Override
             public void onConnect(SocketIOClient socketIOClient) {
-                System.err.println("New client has connected");
+                Logger.log("New client has connected");
             }
         });
 
@@ -458,12 +443,12 @@ public class GameServer {
         if (DEBUG_WITH_DUMPING)
             AsyncEvents.dump(userDisjoined);//TODO this must acync
         onlineUsers.remove(sessionId);
-        System.err.println("The client has disconnected " + name);
+        Logger.log("The client has disconnected " + name);
     }
 
     //API methods
     private static void joinRequest(SocketIOClient client, JoinMessage data, AckRequest ackRequest) {
-        System.err.println("Hello, " + data.getUserName() + "!");
+        Logger.log("Hello, " + data.getUserName() + "!");
         UUID sessionId = client.getSessionId();
         String name = data.getUserName();
         Player newOnlineUser = null;
@@ -665,7 +650,7 @@ public class GameServer {
     }
 
     private static void vote(SocketIOClient client, VoteMessage data, AckRequest ackRequest) {
-        System.err.println("new vote from user");
+        Logger.log("new vote from user");
         Player state = onlineUsers.get(client.getSessionId());
         boolean result = VotesState.vote(state, data.getId(), data.getOption(), data.getAmount());
         client.sendEvent("vote_response", new VoteResponseMessage(result));
@@ -693,7 +678,7 @@ public class GameServer {
                 preStatementDB.executeUpdate();
                 preStatementDB.close();
             } catch (SQLException e) {
-                System.err.println("Exception when update tree vote!");
+                Logger.log("Exception when update tree vote!");
                 e.printStackTrace();
                 System.exit(0);
             }
@@ -774,7 +759,7 @@ public class GameServer {
             preStatementDB.close();
             return tree;
         } catch (SQLException e) {
-            System.err.println("extractTree load");
+            Logger.log("extractTree load");
             e.printStackTrace();
             System.exit(0);
         }
