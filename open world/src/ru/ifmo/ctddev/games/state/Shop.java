@@ -5,6 +5,7 @@ import ru.ifmo.ctddev.games.Logger;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -43,7 +44,28 @@ public class Shop {
     }
 
     public void addItem(Item it) {
-        //TODO write
+        try {
+            preStatementDB = connectionToDB.prepareStatement("INSERT INTO Items " +
+                    "(name, type, costBuy, costSell) VALUE(?, ?, ?, ?);");
+            preStatementDB.setString(1, it.getName());
+            preStatementDB.setInt(2, it.getType());
+            preStatementDB.setInt(3, it.getCostBuy());
+            preStatementDB.setInt(4, it.getCostSell());
+            preStatementDB.executeUpdate();
+            preStatementDB.close();
+
+            preStatementDB = connectionToDB.prepareStatement("SELECT LAST_INSERT_ID();");
+            ResultSet resultSetDB = preStatementDB.executeQuery();
+            resultSetDB.next();
+            int id = resultSetDB.getInt("itemId");
+            it.setId(id);
+            items.put(id, it);
+            preStatementDB.close();
+        } catch (SQLException e) {
+            Logger.log("Exception in addItem!");
+            e.printStackTrace();
+            System.exit(0);
+        }
     }
 
     public Map <Integer, Item> getAvailableItems() {

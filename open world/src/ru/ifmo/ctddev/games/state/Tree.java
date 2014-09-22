@@ -1,8 +1,14 @@
 package ru.ifmo.ctddev.games.state;
 
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+
+import ru.ifmo.ctddev.games.Logger;
 import ru.ifmo.ctddev.games.state.Node;
 
 /**
@@ -12,12 +18,68 @@ public class Tree {
     private ArrayList <ArrayList <Integer> > g;
     private ArrayList <String> name;
     private ArrayList <Double> progress;
-    private ArrayList<Node> nodes = new ArrayList<Node>();
+    private Map<Integer, Node> nodes = new HashMap<Integer, Node>();
     private int root;
     private int[] level;
     private final int LENGTH_OF_EDGE = 80;
     private Map<Integer, Integer> vertexToId = new HashMap<Integer, Integer>();
     private Map<Integer, Integer> idToVertex = new HashMap<Integer, Integer>();
+
+    public static boolean addVertexesInDatabase(Connection connectionToDB, String parentOption, String[] sonOptions) {
+        try {
+            PreparedStatement st = connectionToDB.prepareStatement("SELECT * FROM Tree WHERE name = ?;");
+            st.setString(1, parentOption);
+            ResultSet res = st.executeQuery();
+            if (SQLExtension.size(res) == 0)
+                return false;
+            res.next();
+            int parentId = res.getInt("nodeId");
+            st.close();
+            String query = "INSERT INTO Tree (parentId, name, progress) VALUES ";
+            boolean first = true;
+            for (int i = 0; i < sonOptions.length; ++i) {
+                if (first)
+                    query += "(" + parentId + ", '" + sonOptions[i] + "', 0) ";
+                else
+                    query += ", (" + parentId + ", '" + sonOptions[i] + "', 0) ";
+                first = false;
+            }
+            query += ";";
+            st = connectionToDB.prepareStatement(query);
+            st.executeUpdate();
+            st.close();
+        } catch (SQLException e) {
+            Logger.log("Exception in addVertexesInDatabase!");
+            e.printStackTrace();
+            System.exit(0);
+        }
+        return true;
+    }
+
+    public static Tree extractTree(Connection connectionToDB) {
+        try {
+            PreparedStatement preStatementDB;
+            ResultSet resultSetDB;
+            preStatementDB = connectionToDB.prepareStatement("SELECT * FROM Tree;");
+            resultSetDB = preStatementDB.executeQuery();
+            Tree tree = new Tree(SQLExtension.size(resultSetDB));
+            while (resultSetDB.next()) {
+                int nodeId = resultSetDB.getInt("nodeId");
+                int parent = resultSetDB.getInt("parentId");
+                String name = resultSetDB.getString("name");
+                double progress = resultSetDB.getDouble("progress");
+                System.err.println("par = " + parent + " " + nodeId);
+                tree.addEdge(parent, nodeId, name, progress);
+            }
+            preStatementDB.close();
+            return tree;
+        } catch (SQLException e) {
+            Logger.log("extractTree load");
+            e.printStackTrace();
+            System.exit(0);
+        }
+        return null;
+    }
 
     public Tree(int n) {
         g = new ArrayList<ArrayList<Integer>>();
@@ -32,6 +94,7 @@ public class Tree {
     }
 
     private boolean levelCached = false;
+
     public int getLevelByName(String n) {
         if (!levelCached) {
             level[root] = 1;
@@ -90,13 +153,13 @@ public class Tree {
     }
 
     public Node[] getNodeOnPlane() {
-        if (levelCached) {
-            level[root] = 1;
-            calcLevels(root);
-        }
+        level[root] = 1;
+        calcLevels(root);
         int sizeRoot = g.get(root).size();
-        nodes.add(new Node(idToVertex.get(root), 0, name.get(root), progress.get(root), 0, 0));
+        nodes.put(idToVertex.get(root), new Node(idToVertex.get(root), 0, name.get(root), progress.get(root), 0, 0));
         double startAngle =  -180.0 / sizeRoot;
+        //double angle = 360.0 / sizeRoot;
+        //System.err.println("ss " + startAngle + " " + angle);
         double[] part = getPartition(root, 360.0);
         for (int i = 0; i < sizeRoot; ++i) {
             int start = g.get(root).get(i);
@@ -105,8 +168,9 @@ public class Tree {
             startAngle += angle;
         }
         Node[] ret = new Node[nodes.size()];
-        for (int i = 0; i < nodes.size(); ++i)
-            ret[i] = nodes.get(i);
+        int i = 0;
+        for (Map.Entry <Integer, Node> e : nodes.entrySet())
+            ret[i++] = e.getValue();
         return ret;
     }
 
@@ -122,7 +186,7 @@ public class Tree {
         double res = startAngle + angle * 0.5;
         int x = (int)(curRadius * Math.cos(res / 180 * Math.PI));
         int y = (int)(curRadius * Math.sin(res / 180 * Math.PI));
-        nodes.add(new Node(idToVertex.get(v), idToVertex.get(p), name.get(v), progress.get(v), x, y));
+        nodes.put(idToVertex.get(v), new Node(idToVertex.get(v), idToVertex.get(p), name.get(v), progress.get(v), x, y));
         //double nextAngle = angle / g.get(v).size();
 
         double[] part = getPartition(v, angle);

@@ -157,13 +157,107 @@ public class GameServer {
         }
     }
 
-    class CommandReader implements Runnable {
+    static class CommandReader implements Runnable {
+        public CommandReader() {}
+        private int getNumber(String s) {
+            try {
+                int number = Integer.parseInt(s);
+                return number;
+            } catch (NumberFormatException e) {
+                return -1;
+            }
+        }
+
         @Override
         public void run() {
+            System.err.println("");
+            System.err.println("Available commands!");
+            System.err.println("NewPoll question fromOption numberOptions option1 minimalAmount1 option2 minimalAmount2 ... optionN minimalAmountN");
+            System.err.println("ClosePoll pollId");
+            System.err.println("NewItem name type(number) costBuy costSell");
+            System.err.println("exit");
             Scanner in = new Scanner(System.in);
             while (true) {
-                String cmd = in.nextLine();
-                //
+                String line = in.nextLine();
+                StringTokenizer tokenizer = new StringTokenizer(line);
+                ArrayList <String> lexems = new ArrayList<String>();
+                while (tokenizer.hasMoreElements())
+                    lexems.add((String)tokenizer.nextElement());
+                for (int i = 0; i < lexems.size(); ++i)
+                    System.err.print(lexems.get(i) + "+");
+                System.err.println("");
+
+                String command = lexems.get(0);
+                if (command.equals("NewPoll")) {
+                    String quest = lexems.get(1);
+                    String fromOption = lexems.get(2);
+                    if (quest.isEmpty() || fromOption.isEmpty()) {
+                        System.err.println("Empty question or parent option!");
+                    } else {
+                        final int SZ_HEAD = 4;
+                        int numberOfPolls = getNumber(lexems.get(SZ_HEAD - 1));
+                        if (numberOfPolls <= 0 || lexems.size() != 2 * numberOfPolls + SZ_HEAD)
+                            System.err.println("Illegal number of polls!");
+                        else {
+                            String[] names = new String[numberOfPolls];
+                            int[] minAm = new int[numberOfPolls];
+                            boolean fail = false;
+                            for (int i = SZ_HEAD, j = 0; i < lexems.size(); i += 2, ++j) {
+                                if (lexems.get(i).isEmpty()) {
+                                    System.err.println("Empty option!");
+                                    fail = true;
+                                    break;
+                                }
+                                names[j] = lexems.get(i);
+                            }
+
+                            for (int i = SZ_HEAD + 1, j = 0; i < lexems.size() && !fail; i += 2, ++j) {
+                                int num = getNumber(lexems.get(i));
+                                if (num == -1) {
+                                    System.err.println("Illegal minimal amount!");
+                                    fail = true;
+                                    break;
+                                }
+                                minAm[j] = num;
+                            }
+
+                            if (!fail) {
+                                fail = !newPoll(fromOption, quest, names, minAm);
+                                if (fail)
+                                    System.err.println("Incorrect newPoll");
+                            }
+                        }
+                    }
+                } else if (command.equals("ClosePoll")) {
+                    int id = getNumber(lexems.get(1));
+                    if (id == -1)
+                        System.err.println("Illegal id!");
+                    else
+                        VotesState.closePoll(id);
+                } else if (command.equals("NewItem")) {
+                    String name = lexems.get(1);
+                    int type = getNumber(lexems.get(2));
+                    int costBuy = getNumber(lexems.get(3));
+                    int costSell = getNumber(lexems.get(4));
+                    boolean fail = name.isEmpty() || costBuy == -1 || costSell == -1 || type == -1 || costBuy < costSell;
+                    if (name.isEmpty())
+                        System.err.println("Name is empty!");
+                    else if (type == -1)
+                        System.err.println("type is incorrect!");
+                    else if (costBuy == -1)
+                        System.err.println("costBuy is incorrect!");
+                    else if (costSell == -1)
+                        System.err.println("costSell is incorrect!");
+                    else if (costBuy < costSell)
+                        System.err.println("costBuy less than costSell!");
+                    if (!fail)
+                        shop.addItem(new Item(-1, name, type, costBuy, costSell));
+                } else if (command.equals("exit")) {
+                    server.stop();
+                    System.exit(0);
+                } else {
+                    System.err.println("Unknown command!");
+                }
             }
         }
     }
@@ -214,13 +308,10 @@ public class GameServer {
         shop.loadAvailableItems();
         System.err.println("Successful load available items!");
 
-
         Configuration config = new Configuration();
         config.setHostname(ip);
         config.setPort(port);
-
         server = new SocketIOServer(config);
-
         addListeners();
 
         if (DEBUG_WITH_DUMPING) {
@@ -233,6 +324,9 @@ public class GameServer {
                 System.exit(0);
             }
         }
+
+        Thread comReader = new Thread(new CommandReader());
+        comReader.start();
 
         server.start();
         System.err.println("The server has started! All information write in log");
@@ -667,7 +761,7 @@ public class GameServer {
                     ai = invMoney[i];
             }
             double addProgress = getProgress(s, ai, amount);
-            Tree tree = extractTree();
+            Tree tree = Tree.extractTree(connectionToDB);
             int level = tree.getLevelByName(data.getOption());
             addProgress *= 1.0 * level / THRESHOLD;
             try {
@@ -685,9 +779,13 @@ public class GameServer {
         }
     }
 
-    private static void newVote(String question, String[] optionsName, int[] minimalAmount) {
+    private static boolean newPoll(String fromOption, String question, String[] optionsName, int[] minimalAmount) {
+        boolean result = Tree.addVertexesInDatabase(connectionToDB, fromOption, optionsName);
+        if (!result)
+            return false;
         Poll poll = VotesState.addActivePoll(question, optionsName, minimalAmount);
         server.getBroadcastOperations().sendEvent("new_vote", new NewVoteBroadcastMessage(poll));
+        return true;
     }
 
     //Shop
@@ -741,33 +839,13 @@ public class GameServer {
             }
         }
     }
-    //Tree
-    public static Tree extractTree() {
-        try {
-            PreparedStatement preStatementDB;
-            ResultSet resultSetDB;
-            preStatementDB = connectionToDB.prepareStatement("SELECT * FROM Tree;");
-            resultSetDB = preStatementDB.executeQuery();
-            Tree tree = new Tree(SQLExtension.size(resultSetDB));
-            while (resultSetDB.next()) {
-                int nodeId = resultSetDB.getInt("nodeId");
-                int parent = resultSetDB.getInt("parentId");
-                String name = resultSetDB.getString("name");
-                double progress = resultSetDB.getDouble("progress");
-                tree.addEdge(parent, nodeId, name, progress);
-            }
-            preStatementDB.close();
-            return tree;
-        } catch (SQLException e) {
-            Logger.log("extractTree load");
-            e.printStackTrace();
-            System.exit(0);
-        }
-        return null;
-    }
 
+    //Tree
     public static void getTree(SocketIOClient client, GetTreeMessage data, AckRequest ackRequest) {
-        Tree tree = extractTree();
+        Tree tree = Tree.extractTree(connectionToDB);
+        Node[] arr = tree.getNodeOnPlane();
+        for (int i = 0; i < arr.length; ++i)
+            System.err.println(arr[i].getX() + " " + arr[i].getY());
         client.sendEvent("tree", new TreeMessage(tree.getNodeOnPlane()));
     }
 }
